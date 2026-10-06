@@ -67,7 +67,7 @@ bun run build:single-exe
 
 [HAPI Chat](https://github.com/3ndetz/hapi-vscode) is a community-maintained VS Code extension that embeds HAPI's own web interface. Save and switch between multiple hub profiles, work in parallel chat windows, and browse sessions grouped by working folder. It supports VS Code's proxy settings, with a separate proxy choice for each hub, and stores access tokens in VS Code SecretStorage.
 
-Install from [Open VSX](https://open-vsx.org/extension/3ndetz/hapi-chat), or download a [VSIX release](https://github.com/3ndetz/hapi-vscode/releases). See the [extension README](https://github.com/3ndetz/hapi-vscode#readme) for setup and screenshots.
+Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=3ndetz.hapi-chat) or [Open VSX](https://open-vsx.org/extension/3ndetz/hapi-chat), or download a [VSIX release](https://github.com/3ndetz/hapi-vscode/releases). See the [extension README](https://github.com/3ndetz/hapi-vscode#readme) for setup and screenshots.
 
 ## Credits
 

@@ -1,10 +1,11 @@
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { z } from 'zod';
 import { configuration } from '@/configuration';
+import { renameWithRetry } from '@/utils/renameWithRetry';
 import { getProcessStartMarker, isProcessAlive } from '@/utils/process';
 import { withSettingsFileLock } from '@hapi/protocol/settingsFileLock';
 
@@ -69,7 +70,7 @@ export async function saveRuntime(record: CodexRuntimeRecord): Promise<void> {
         const target = join(directory, `${record.id}.json`);
         const temporary = `${target}.${randomUUID()}.tmp`;
         await writeFile(temporary, JSON.stringify(record), { mode: 0o600 });
-        await rename(temporary, target);
+        await renameWithRetry(temporary, target);
     }
 }
 

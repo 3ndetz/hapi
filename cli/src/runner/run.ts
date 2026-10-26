@@ -860,6 +860,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
         }
         invalidateVerifiedExit(`PID-${pid}`);
         logger.debug(`[RUNNER RUN] Spawned process with PID ${pid}`);
+        const webhookTimeoutMs = sessionStartupTimeout(options.agent, process.env.HAPI_RUNNER_WEBHOOK_TIMEOUT_MS);
         let observedExitCode: number | null = null;
         let observedExitSignal: NodeJS.Signals | null = null;
         const buildWebhookFailureMessage = (reason: 'timeout' | 'exit-before-webhook' | 'process-error-before-webhook'): string => {
@@ -950,7 +951,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
         logger.debug(`[RUNNER RUN] Waiting for session webhook for PID ${pid}`);
 
         const recoverableStartup = options.agent === 'codex' ? waitForRecoverableStartup<TrackedSession>({
-          timeoutMs: sessionStartupTimeout(options.agent, process.env.HAPI_RUNNER_WEBHOOK_TIMEOUT_MS),
+          timeoutMs: webhookTimeoutMs,
           timeoutMessage: `Codex startup is still unconfirmed for PID ${pid}; the process remains tracked. Wait for the existing session instead of creating another, or stop it explicitly.`,
           sessionId: session => session.happySessionId!,
           onLateReady: session => {
@@ -1047,7 +1048,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
                 errorMessage: buildWebhookFailureMessage('timeout')
               });
             })();
-          }, sessionStartupTimeout(options.agent, process.env.HAPI_RUNNER_WEBHOOK_TIMEOUT_MS));
+          }, webhookTimeoutMs);
 
           // Register awaiter
           pidToAwaiter.set(pid, (completedSession) => {

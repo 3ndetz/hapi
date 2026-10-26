@@ -112,8 +112,9 @@ export class SharedCodexRoot {
                 }
                 this.publishPlan();
             }
+            const receivedAt = Date.now();
             const modelAtReceipt = record(params).threadId === this.threadId ? this.settings.model ?? undefined : undefined;
-            this.notifications = this.notifications.then(() => this.notification(method, params, modelAtReceipt)).catch(error => logger.debug('[Codex shared] projection', error));
+            this.notifications = this.notifications.then(() => this.notification(method, params, modelAtReceipt, receivedAt)).catch(error => logger.debug('[Codex shared] projection', error));
         });
         this.client.setTransportAbandonedHandler(() => { void this.reconnect(); });
         this.session.onUserMessage((message, localId) => {
@@ -272,7 +273,7 @@ export class SharedCodexRoot {
         for (const listener of this.settingsListeners) listener();
         this.publishPlan();
     }
-    private async notification(method: string, params: unknown, modelAtReceipt?: string): Promise<void> {
+    private async notification(method: string, params: unknown, modelAtReceipt?: string, receivedAt = Date.now()): Promise<void> {
         if (!this.threadId || this.closed) return;
         const p = record(params);
         if (method === 'thread/started') {
@@ -312,7 +313,7 @@ export class SharedCodexRoot {
         if (method === 'thread/queue/changed') {
             for (const id of await this.queue.reconcile()) this.dequeuedInputs.add(id);
         }
-        await this.projection.notification(method, params, modelAtReceipt); this.publishCompaction(); this.alive();
+        await this.projection.notification(method, params, modelAtReceipt, receivedAt); this.publishCompaction(); this.alive();
     }
     async readThread(threadId = this.threadId): Promise<Record<string, unknown>> {
         let thread = record(record(await this.client.request('thread/read', { threadId, includeTurns: false })).thread);

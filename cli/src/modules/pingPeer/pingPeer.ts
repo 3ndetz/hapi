@@ -13,11 +13,13 @@ import axios, { type AxiosInstance } from 'axios'
 import { extractAssistantPlainText, getPermissionModesForFlavor, isObject } from '@hapi/protocol'
 import { normalizeSessionIdPrefix } from '@hapi/protocol/sessionCitation'
 import { configuration } from '@/configuration'
+import { isPeerToolsDisabled } from '@/modules/common/peerTools'
 import { getAuthToken } from '@/api/auth'
 import { buildHubRequestHeaders } from '@/api/hubExtraHeaders'
 
 export type PingPeerErrorCode =
     | 'bad_args'
+    | 'disabled'
     | 'auth_failed'
     | 'not_found'
     | 'ambiguous'
@@ -33,6 +35,20 @@ export class PingPeerError extends Error {
         super(message)
         this.name = 'PingPeerError'
         this.code = code
+    }
+}
+
+/**
+ * Defense-in-depth gate for HAPI_DISABLE_PEER_TOOLS: the MCP server and CLI
+ * surface refuse earlier, but any other caller (stale --tools bridge, shell
+ * `hapi ping-peer` from a wrapped agent) lands here and fails loudly.
+ */
+function assertPeerToolsEnabled(): void {
+    if (isPeerToolsDisabled()) {
+        throw new PingPeerError(
+            'disabled',
+            'peer session tools are disabled on this machine (HAPI_DISABLE_PEER_TOOLS is set)'
+        )
     }
 }
 
@@ -373,6 +389,7 @@ async function sendMessage(
 export async function listPeerSessions(
     options: ListPeerSessionsOptions = {}
 ): Promise<PingPeerSessionSummary[]> {
+    assertPeerToolsEnabled()
     const apiUrl = resolveApiUrl(options.apiUrl)
     const accessToken = resolveAccessToken(options.accessToken)
     const http = options.http ?? axios
@@ -459,6 +476,7 @@ export function formatPeerSessionsList(
 }
 
 export async function pingPeer(options: PingPeerOptions): Promise<PingPeerResult> {
+    assertPeerToolsEnabled()
     const prefix = normalizeSessionIdPrefix(options.sessionIdPrefix ?? '')
     const message = options.message ?? ''
     if (!prefix) {
@@ -531,6 +549,7 @@ export async function pingPeer(options: PingPeerOptions): Promise<PingPeerResult
 export function exitCodeForPingPeerError(error: PingPeerError): number {
     switch (error.code) {
         case 'bad_args':
+        case 'disabled':
         case 'auth_failed':
         case 'not_found':
         case 'ambiguous':
@@ -666,6 +685,7 @@ async function fetchSessionMessages(
  * Read-only: never resumes inactive sessions (unlike `pingPeer`).
  */
 export async function inspectPeer(options: InspectPeerOptions): Promise<InspectPeerResult> {
+    assertPeerToolsEnabled()
     const prefix = normalizeSessionIdPrefix(options.sessionIdPrefix ?? '')
     if (!prefix) {
         throw new PingPeerError('bad_args', 'session id prefix is required')

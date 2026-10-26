@@ -869,7 +869,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
           } else if (reason === 'process-error-before-webhook') {
             message = `Session process error before webhook for PID ${pid}`;
           } else {
-            message = `Session webhook timeout for PID ${pid}`;
+            message = `Session webhook timeout for PID ${pid} after ${webhookTimeoutMs}ms`;
           }
 
           if (observedExitCode !== null || observedExitSignal) {
@@ -878,6 +878,10 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
             } else {
               message += ` (signal ${observedExitSignal})`;
             }
+          }
+
+          if (reason === 'timeout') {
+            message += '. Adjust HAPI_RUNNER_WEBHOOK_TIMEOUT_MS on the runner host and restart the runner to change this wait';
           }
 
           const trimmedTail = stderrTail.trim();

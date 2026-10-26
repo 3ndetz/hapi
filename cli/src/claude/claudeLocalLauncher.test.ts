@@ -47,6 +47,7 @@ function createSessionStub() {
             claudeEnvVars: {},
             claudeArgs: [],
             getModel: () => 'claude-opus-4-1',
+            getPermissionMode: () => 'default',
             mcpServers: [],
             allowedTools: [],
             hookSettingsPath: null,

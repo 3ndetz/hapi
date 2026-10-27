@@ -4,6 +4,9 @@ Native SwiftUI/UIKit client for HAPI, independent of `web/` at the code level.
 It shares the [client protocol](../docs/api/client-contract/index.md) and
 web-generated golden fixtures in `shared/fixtures/`.
 
+End users: install HAPI from the [App Store](https://apps.apple.com/app/id6805699104).
+This README covers development builds.
+
 ## Current capabilities
 
 The app provides sessions/chat, approvals and questions, new sessions,

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'bun:test'
 import { SSEManager } from './sseManager'
 import type { SyncEvent } from '../sync/syncEngine'
+
+it('closes a stalled subscriber once pending writes reach the bound', () => {
+    const manager = new SSEManager(0, new VisibilityTracker())
+    let closed = 0
+    manager.subscribe({ id: 'slow', namespace: 'default', all: true,
+        send: () => new Promise<void>(() => {}), sendHeartbeat: () => {}, close: () => { closed++ } })
+    for (let i = 0; i < 300; i++) manager.broadcast({ type: 'session-updated', sessionId: 's', namespace: 'default' })
+    expect(closed).toBe(1)
+    expect(manager.hasSubscription('slow')).toBe(false)
+})
 import { VisibilityTracker } from '../visibility/visibilityTracker'
 
 describe('SSEManager namespace filtering', () => {

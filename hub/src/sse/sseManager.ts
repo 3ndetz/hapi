@@ -14,6 +14,8 @@ export type SSESubscription = {
 type SSEConnection = SSESubscription & {
     send: (event: SyncEvent, eventId?: string) => void | Promise<void>
     sendHeartbeat: () => void | Promise<void>
+    close?: () => void
+    inflight: number
     /**
      * Non-null while a resumed connection is still writing its replay: live
      * broadcasts land here instead of on the wire so replayed events keep
@@ -73,6 +75,7 @@ export class SSEManager {
         resumeFrom?: string | null
         send: (event: SyncEvent, eventId?: string) => void | Promise<void>
         sendHeartbeat: () => void | Promise<void>
+        close?: () => void
     }): SSESubscription & SSEResumeResult {
         const subscription: SSEConnection = {
             id: options.id,
@@ -82,6 +85,8 @@ export class SSEManager {
             machineId: options.machineId ?? null,
             send: options.send,
             sendHeartbeat: options.sendHeartbeat,
+            close: options.close,
+            inflight: 0,
             pending: null
         }
 
@@ -259,13 +264,33 @@ export class SSEManager {
             // the receiving namespace so the cursor stays bound to it.
             const eventId = this.eventIdFor(seq, connection.namespace)
             if (connection.pending) {
+                if (connection.pending.length >= 256) {
+                    this.unsubscribe(connection.id)
+                    connection.close?.()
+                    continue
+                }
                 connection.pending.push({ event, eventId })
                 continue
             }
 
-            void Promise.resolve(connection.send(event, eventId)).catch(() => {
+            if (connection.inflight >= 256) {
                 this.unsubscribe(connection.id)
-            })
+                connection.close?.()
+                continue
+            }
+            try {
+                const result = connection.send(event, eventId)
+                if (result) {
+                    connection.inflight++
+                    void Promise.resolve(result).catch(() => {
+                        this.unsubscribe(connection.id)
+                        connection.close?.()
+                    }).finally(() => { connection.inflight-- })
+                }
+            } catch {
+                this.unsubscribe(connection.id)
+                connection.close?.()
+            }
         }
     }
 

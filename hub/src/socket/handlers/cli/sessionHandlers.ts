@@ -172,7 +172,11 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
             return
         }
 
+        const wasStored = Boolean(localId && store.messages.lookupQueuedMessage(sid, localId).status !== 'absent')
         const msg = store.messages.addMessage(sid, content, localId, undefined, createdAt)
+        // The durable row already exists; replay must not be mistaken for
+        // fresh agent progress or trigger another round of UI updates.
+        if (wasStored) return
 
         // A reasoning stream arrives as a series of growing snapshots under one
         // stable id, so a stream should cost one row rather than one per
@@ -433,6 +437,7 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
             emitAccessError('session', data.sid, sessionAccess.reason)
             return
         }
+        if (!data.steered && !data.clearQueuedThinkingGrace && localIds.every(id => store.messages.lookupQueuedMessage(data.sid, id).status === 'invoked')) return
         const invokedAt = Date.now()
         let sessionUpdatedAt: number
         try {

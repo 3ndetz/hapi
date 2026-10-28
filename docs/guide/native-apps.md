@@ -134,8 +134,11 @@ send it automatically. See [Voice input and assistant](./voice-assistant.md).
 ### Features available through the web
 
 Use the web app for the remote terminal, Work Graph, realtime dictation and
-voice assistant, session fork/rewind/export, and the skills picker. These have
-no native UI. Session history actions also depend on the agent's capabilities.
+voice assistant, Markdown export, and the skills picker. These have no native
+UI. On iOS, the chat's … menu forks the current conversation, rewinds or forks
+at a user message with a native history point, and exports the session as
+JSON; Android has no fork, rewind or export UI. Session history actions also
+depend on the agent's capabilities.
 Both apps display existing scheduled messages. On iOS, the composer's clock
 schedules a text-only send up to 7 days ahead (relative presets or a specific
 time); Android has no form to create scheduled sends.

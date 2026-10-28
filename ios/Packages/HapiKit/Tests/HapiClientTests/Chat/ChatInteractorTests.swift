@@ -1103,6 +1103,61 @@ struct ChatInteractorTests {
         })
     }
 
+    // MARK: Conversation history
+
+    private func historyDetail(thinking: Bool = false, flavor: String = "claude") -> Session {
+        var detail = chatDetail(flavor: flavor, thinking: thinking)
+        detail.metadata?.capabilities = SessionCapabilities(
+            conversationHistory: ConversationHistoryCapabilities(forkCurrent: true, forkAtMessage: true, rewindToMessage: true)
+        )
+        detail.metadata?.conversationHistoryPoints = ["l1": true]
+        return detail
+    }
+
+    @Test func forkCurrentAndAtMessagePostAndOpenTheNewSession() async throws {
+        let harness = try await ChatInteractionHarness(detail: historyDetail())
+        #expect(harness.interactor.canForkCurrentConversation)
+        await harness.performer.serve("POST", "/api/sessions/sess-1/fork", json: #"{"sessionId":"fork-1"}"#)
+
+        harness.interactor.forkConversation()
+        #expect(await eventually { harness.events.contains(.sessionSuperseded(sessionId: "fork-1")) })
+        #expect(await eventually { !harness.interactor.historyActionPending })
+        harness.interactor.forkConversation(fromMessageLocalId: "l1")
+        #expect(await eventually {
+            await harness.performer.bodies("POST", pathSuffix: "/api/sessions/sess-1/fork") == ["{}", #"{"messageLocalId":"l1"}"#]
+        })
+    }
+
+    @Test func messageActionsNeedANativePointAndAnIdleTurn() async throws {
+        let idle = try await ChatInteractionHarness(detail: historyDetail())
+        #expect(idle.interactor.historyActions(forMessageLocalId: "l1") == (true, true))
+        #expect(idle.interactor.historyActions(forMessageLocalId: "l2") == (false, false))
+        #expect(idle.interactor.historyActions(forMessageLocalId: nil) == (false, false))
+
+        let running = try await ChatInteractionHarness(detail: historyDetail(thinking: true))
+        #expect(running.interactor.historyActions(forMessageLocalId: "l1") == (false, false))
+        let runningCodex = try await ChatInteractionHarness(detail: historyDetail(thinking: true, flavor: "codex"))
+        #expect(runningCodex.interactor.historyActions(forMessageLocalId: "l1") == (true, false))
+        #expect(!runningCodex.interactor.canForkCurrentConversation)
+    }
+
+    @Test func ambiguousRewindOffersAForkInstead() async throws {
+        let harness = try await ChatInteractionHarness(detail: historyDetail())
+        await harness.performer.script(
+            "POST", "/api/sessions/sess-1/rewind",
+            status: 409, json: #"{"error":"ambiguous","code":"ambiguous_native_boundary_fork_safe","hydrateFailed":false}"#
+        )
+        harness.interactor.rewindConversation(toMessageLocalId: "l1")
+        #expect(await eventually { harness.interactor.rewindForkFallbackLocalId == "l1" })
+
+        harness.interactor.dismissRewindForkFallback()
+        await harness.performer.script("POST", "/api/sessions/sess-1/rewind", status: 409, json: #"{"error":"Session busy"}"#)
+        harness.interactor.rewindConversation(toMessageLocalId: "l1")
+        #expect(await eventually { harness.events.contains(.notice("Session busy")) })
+        #expect(harness.interactor.rewindForkFallbackLocalId == nil)
+        #expect(await harness.performer.bodies("POST", pathSuffix: "/rewind").first == #"{"messageLocalId":"l1"}"#)
+    }
+
     // MARK: Scheduled send
 
     @Test func presetScheduleResolvesAtSendAndQueuesWithoutSteer() async throws {

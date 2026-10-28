@@ -38,6 +38,8 @@ enum LocalizedNoticeMapper {
         "Scheduled messages can't include attachments — remove them or send now",
         "Scheduled time must be in the future",
         "Scheduled sends can be at most 7 days ahead",
+        "Failed to fork conversation",
+        "Failed to rewind conversation",
         "Draft parked to scratchlist",
         "Scratchlist is full (200 entries)",
         "Couldn't park the draft — check the hub connection",

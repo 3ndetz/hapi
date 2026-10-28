@@ -80,6 +80,11 @@ public final class ChatInteractor {
     public private(set) var configOpPending = false
     /// One delete/reopen at a time (the Android `sessionOpPending`).
     public private(set) var sessionOpPending = false
+    /// One fork/rewind at a time (web `historyActionPending`).
+    public private(set) var historyActionPending = false
+    /// A rewind the hub refused as an ambiguous native boundary; the
+    /// screen offers a fork from the same point instead.
+    public private(set) var rewindForkFallbackLocalId: String?
 
     /// Send time for the next chat send; cleared once that send dispatches.
     public private(set) var pendingSchedule: PendingSchedule?
@@ -1022,6 +1027,77 @@ public final class ChatInteractor {
                   response.success, let commands = response.commands else { return }
             self.slashCommandsFetched = commands
         }
+    }
+
+    // MARK: - Conversation history
+
+    private var historyCapabilities: ConversationHistoryCapabilities? {
+        sessionStore.detail(for: sessionId)?.metadata?.capabilities?.conversationHistory
+    }
+
+    /// Fork from the current conversation: the agent advertises
+    /// `forkCurrent`, the session is live, and no Codex turn is running
+    /// (web fork-current gate).
+    public var canForkCurrentConversation: Bool {
+        let live = currentSessionState()
+        return historyCapabilities?.forkCurrent == true && live.active
+            && !(live.thinking && currentFlavor() == "codex")
+    }
+
+    /// Message-level history actions for a user message with a native
+    /// history point (`metadata.conversationHistoryPoints`).
+    public func historyActions(forMessageLocalId localId: String?) -> (fork: Bool, rewind: Bool) {
+        guard let localId, !localId.isEmpty,
+              let detail = sessionStore.detail(for: sessionId), detail.active,
+              detail.metadata?.conversationHistoryPoints?[localId] == true else { return (false, false) }
+        let running = detail.thinking
+        let fork = historyCapabilities?.forkAtMessage == true && (!running || currentFlavor() == "codex")
+        let rewind = historyCapabilities?.rewindToMessage == true && !running
+        return (fork, rewind)
+    }
+
+    /// `POST /fork` (from `messageLocalId`, else the current conversation);
+    /// the new session opens in place of this one.
+    public func forkConversation(fromMessageLocalId localId: String? = nil) {
+        guard !historyActionPending else { return }
+        historyActionPending = true
+        rewindForkFallbackLocalId = nil
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.historyActionPending = false }
+            do {
+                let forked = try await self.api.forkConversation(sessionId: self.sessionId, messageLocalId: localId)
+                self.sessionStore.scheduleRefresh()
+                self.emit(.sessionSuperseded(sessionId: forked))
+            } catch {
+                self.emit(.notice(hubErrorMessage(error) ?? "Failed to fork conversation"))
+            }
+        }
+    }
+
+    /// `POST /rewind`. The hub's history event resets the message window;
+    /// an ambiguous Codex boundary arms ``rewindForkFallbackLocalId``.
+    public func rewindConversation(toMessageLocalId localId: String) {
+        guard !historyActionPending else { return }
+        historyActionPending = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.historyActionPending = false }
+            do {
+                try await self.api.rewindConversation(sessionId: self.sessionId, messageLocalId: localId)
+                if let controller = self.controller {
+                    await controller.syncTail(ensureAfterCurrent: true, allowingHistoryReset: true)
+                }
+            } catch let error as APIError where error.code == "ambiguous_native_boundary_fork_safe" {
+                self.rewindForkFallbackLocalId = localId
+            } catch {
+                self.emit(.notice(hubErrorMessage(error) ?? "Failed to rewind conversation"))
+            }
+        }
+    }
+
+    public func dismissRewindForkFallback() {
+        rewindForkFallbackLocalId = nil
     }
 
     // MARK: - Session lifecycle

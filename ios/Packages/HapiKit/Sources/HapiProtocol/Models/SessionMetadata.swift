@@ -138,6 +138,8 @@ public struct SessionMetadata: Codable, Equatable, Sendable {
     public var piSessionId: String?
     /// Pi model with its provider (`session.model` holds only the id).
     public var piSelectedModel: PiModelReference?
+    /// User-message `localId`s with a native fork/rewind point.
+    public var conversationHistoryPoints: [String: Bool]?
 
     public init(
         path: String,
@@ -165,7 +167,8 @@ public struct SessionMetadata: Codable, Equatable, Sendable {
         kimiSessionId: String? = nil,
         copilotSessionId: String? = nil,
         piSessionId: String? = nil,
-        piSelectedModel: PiModelReference? = nil
+        piSelectedModel: PiModelReference? = nil,
+        conversationHistoryPoints: [String: Bool]? = nil
     ) {
         self.path = path
         self.host = host
@@ -193,5 +196,6 @@ public struct SessionMetadata: Codable, Equatable, Sendable {
         self.copilotSessionId = copilotSessionId
         self.piSessionId = piSessionId
         self.piSelectedModel = piSelectedModel
+        self.conversationHistoryPoints = conversationHistoryPoints
     }
 }

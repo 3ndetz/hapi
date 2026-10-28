@@ -6,12 +6,10 @@ import HapiProtocol
 /// the failure carries no hub message, so the caller shows its own
 /// localized fallback.
 public func formatReopenError(_ error: any Error) -> String? {
-    guard let apiError = error as? APIError,
-          let body = apiError.body,
+    guard let message = hubErrorMessage(error),
+          let body = (error as? APIError)?.body,
           let value = try? HapiJSON.decoder.decode(JSONValue.self, from: Data(body.utf8)),
-          case .object(let object) = value,
-          case .string(let message)? = object["error"],
-          !message.isEmpty else {
+          case .object(let object) = value else {
         return nil
     }
     var missing: [String] = []
@@ -22,6 +20,18 @@ public func formatReopenError(_ error: any Error) -> String? {
         }
     }
     return missing.isEmpty ? message : "\(message) (missing: \(missing.joined(separator: ", ")))"
+}
+
+/// The hub's `{error}` text, or nil when the failure carries none.
+public func hubErrorMessage(_ error: any Error) -> String? {
+    guard let body = (error as? APIError)?.body,
+          let value = try? HapiJSON.decoder.decode(JSONValue.self, from: Data(body.utf8)),
+          case .object(let object) = value,
+          case .string(let message)? = object["error"],
+          !message.isEmpty else {
+        return nil
+    }
+    return message
 }
 
 /// `DELETE /sessions/:id` answers 409 while the session is active (or

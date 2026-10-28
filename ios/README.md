@@ -12,7 +12,10 @@ This README covers development builds.
 The app provides sessions/chat, approvals and questions, new sessions,
 attachments, scheduled sends, `/` command suggestions, files/Git, Scratchlist, standard dictation, usage/storage,
 settings and encrypted APNs notifications. It pairs with multiple hubs and
-keeps one active. Session lists support machine filtering, pinning, rename and
+keeps one active. The chat's … menu also forks the conversation, rewinds or
+forks at a loaded user message with a native history point (a separate sheet,
+so transcript rows are untouched), and exports the session as JSON through the
+Files save panel (Markdown export stays web-only). Session lists support machine filtering, pinning, rename and
 archive (active) or reopen/delete (inactive), from the row's context menu or the
 chat's … menu; sending to an inactive session or reopening it can resume it and
 migrate the draft/navigation when the returned session ID changes.

@@ -12,7 +12,7 @@ import { PLAN_FAKE_REJECT } from "./sdk/prompts";
 import { EnhancedMode } from "./loop";
 import { OutgoingMessageQueue } from "./utils/OutgoingMessageQueue";
 import type { ClaudePermissionMode } from "@hapi/protocol/types";
-import { applySessionTitleFallback } from './utils/sessionTitleFallback';
+import { applySessionTitleFallback, readNativeSessionTitle, stripAttachmentReferences } from './utils/sessionTitleFallback';
 import {
     RemoteLauncherBase,
     type RemoteLauncherDisplayContext,
@@ -490,7 +490,13 @@ class ClaudeRemoteLauncher extends RemoteLauncherBase {
                         claudeArgs: session.claudeArgs,
                         onMessage,
                         onFirstResult: (initialMessage) => {
-                            applySessionTitleFallback(session.client, initialMessage);
+                            // SDK streams omit Claude Code's native ai-title; it is only in the transcript.
+                            const sessionId = session.sessionId;
+                            void (sessionId ? readNativeSessionTitle(session.path, sessionId) : Promise.resolve(null))
+                                .then((nativeTitle) => applySessionTitleFallback(
+                                    session.client,
+                                    nativeTitle ?? stripAttachmentReferences(initialMessage)
+                                ));
                         },
                         onCompletionEvent: (message: string) => {
                             logger.debug(`[remote]: Completion event: ${message}`);

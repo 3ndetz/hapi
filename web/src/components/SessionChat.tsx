@@ -91,6 +91,7 @@ import { TeamPanel } from '@/components/TeamPanel'
 import { SessionStatusPanel } from '@/components/SessionStatusPanel'
 import { buildSessionStatusData } from '@/chat/sessionStatus'
 import { usePlatform } from '@/hooks/usePlatform'
+import { getToolCardDisplayPresentation, useToolCardDisplayMode } from '@/hooks/useToolCardDisplayMode'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { useCodexModels } from '@/hooks/queries/useCodexModels'
 import { useCursorModels } from '@/hooks/queries/useCursorModels'
@@ -639,6 +640,8 @@ function SessionChatInner(props: SessionChatProps) {
     const { t } = useTranslation()
     const { codexExplorationCollapsed } = useCodexExplorationCollapse()
     const navigate = useNavigate()
+    const { toolCardDisplayMode } = useToolCardDisplayMode()
+    const { groupingMode: toolGroupingMode } = getToolCardDisplayPresentation(toolCardDisplayMode)
     const [historyActionPending, setHistoryActionPending] = useState(false)
     const [rewindForkFallback, setRewindForkFallback] = useState<string | null>(null)
 
@@ -701,6 +704,7 @@ function SessionChatInner(props: SessionChatProps) {
     const focusComposerRef = useRef<(() => void) | null>(null)
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
     const visibleGroupsRef = useRef<ToolGroupBlock[]>([])
+    const visibleGroupsModeRef = useRef(toolGroupingMode)
     const [rememberedTailBoundary, setRememberedTailBoundary] = useState<{
         id: string | null
         tailRevision: number
@@ -1503,9 +1507,11 @@ function SessionChatInner(props: SessionChatProps) {
         () => buildVisibleChatBlocks(reconciled.blocks, {
             hasMoreMessages: props.hasMoreMessages,
             previousGroups: visibleGroupsRef.current,
+            previousGroupingMode: visibleGroupsModeRef.current,
+            groupingMode: toolGroupingMode,
             codexExplorationCollapsed
         }),
-        [reconciled.blocks, props.hasMoreMessages, codexExplorationCollapsed]
+        [reconciled.blocks, props.hasMoreMessages, toolGroupingMode, codexExplorationCollapsed]
     )
 
     // Fork-current must compare against assistant-ui message ids (`kind:id`),
@@ -1546,8 +1552,9 @@ function SessionChatInner(props: SessionChatProps) {
     }, [latestCompletedBoundaryId])
 
     useEffect(() => {
+        visibleGroupsModeRef.current = toolGroupingMode
         visibleGroupsRef.current = visibleBlocks.filter(isToolGroupBlock)
-    }, [visibleBlocks])
+    }, [toolGroupingMode, visibleBlocks])
 
     // "N new messages" counts rendered blocks, not raw messages: a subagent run
     // is dozens of sidechain messages but a single Task card, and a tool_use +

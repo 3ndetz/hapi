@@ -1,6 +1,6 @@
 import {
     CREATABLE_AGENT_FLAVORS,
-    getLaunchPermissionModesForFlavor,
+    getPermissionModesForFlavor,
     resolveHapiYoloPermissionMode,
     type PermissionMode
 } from '@hapi/protocol'
@@ -84,7 +84,7 @@ export function loadPreferredLaunchSettings(
             return null
         }
         const permissionMode = typeof parsed.permissionMode === 'string'
-            ? getLaunchPermissionModesForFlavor(agent).includes(parsed.permissionMode as PermissionMode)
+            ? getPermissionModesForFlavor(agent).includes(parsed.permissionMode as PermissionMode)
                 ? parsed.permissionMode as PermissionMode
                 : 'default'
             : undefined
@@ -159,7 +159,7 @@ export function resolvePreferredLaunchSettings(
         )
         : (preferred?.modelReasoningEffort ?? 'default')
     const usesSharedPermissionMode = usesSharedPermissionModeState(agent)
-    const availablePermissionModes = getLaunchPermissionModesForFlavor(agent)
+    const availablePermissionModes = getPermissionModesForFlavor(agent)
     const preferredPermissionMode = preferred?.permissionMode
     // A removed explicit mode falls back to Default, never to a stale YOLO toggle.
     const legacyYoloBridgeMode = preferredPermissionMode === undefined && legacyYolo && LEGACY_YOLO_BRIDGE_AGENTS.includes(agent)

@@ -124,8 +124,6 @@ Source: `hub/src/web/routes/sessions.ts`; flavor gates in `shared/src/modes.ts` 
 ownership mode. `/switch` returns HTTP 409 with
 `code: 'control_mode_not_applicable'`; do not offer takeover. The remote-only
 Codex configuration restrictions above do not apply to these sessions.
-Shared Codex rejects `safe-yolo` even though it remains in the historical
-Codex permission-mode schema; do not offer it for concurrent sessions.
 
 Shared `/clear` has no global `supersededBySessionId` change; clients other than
 the caller stay on the original thread. Fork may return an already-bound shared

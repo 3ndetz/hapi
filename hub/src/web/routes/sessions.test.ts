@@ -1216,10 +1216,10 @@ describe('sessions routes', () => {
         ])
     })
 
-    it('rejects Safe Yolo for shared sessions', async () => {
+    it('rejects Safe Yolo for Codex', async () => {
         const session = createSession({
             active: false,
-            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex', capabilities: { concurrentClients: true } }
+            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'codex' }
         })
         const { app, applySessionConfigCalls } = createApp(session)
 
@@ -1230,7 +1230,7 @@ describe('sessions routes', () => {
         })
 
         expect(response.status).toBe(400)
-        expect(await response.json()).toEqual({ error: 'Safe Yolo is not available for shared sessions' })
+        expect(await response.json()).toEqual({ error: 'Invalid permission mode for session flavor' })
         expect(applySessionConfigCalls).toEqual([])
     })
 

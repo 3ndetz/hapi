@@ -12,13 +12,13 @@ This README covers development builds.
 The app provides sessions/chat, approvals and questions, new sessions,
 attachments, files/Git, Scratchlist, standard dictation, usage/storage,
 settings and encrypted APNs notifications. It pairs with multiple hubs and
-keeps one active. Session lists support machine filtering, pinning and archive;
-sending to an inactive session can resume it and migrate the draft/navigation
-when the returned session ID changes.
+keeps one active. Session lists support machine filtering, pinning, rename and
+archive (active) or reopen/delete (inactive), from the row's context menu or the
+chat's … menu; sending to an inactive session or reopening it can resume it and
+migrate the draft/navigation when the returned session ID changes.
 
 Model, permission and Codex collaboration controls follow the session's agent/capabilities;
-usage/storage require the owner namespace. Rename, Delete and explicit Reopen
-have API wrappers but no current iOS UI. See the [native app guide](../docs/guide/native-apps.md)
+usage/storage require the owner namespace. See the [native app guide](../docs/guide/native-apps.md)
 for platform differences, web-only features and everyday use.
 
 ## Requirements
@@ -351,8 +351,9 @@ Selection and nested navigation are in memory, not restored across launches.
 neither window geometry nor sidebar filters may clear them. Reopening the
 selected session preserves its file page. A different/superseding session resets
 the entire detail stack, but a late superseding callback cannot replace a chat
-the user has since selected. Only explicit removal events or successful archive
-operations clear the current selection, never optimistic list removal/rollback.
+the user has since selected. Only explicit removal events or successful
+archive/delete operations clear the current selection (on iPhone they pop that
+chat), never optimistic list removal/rollback.
 
 The detail's identity is hub/session-based, so resizing preserves the existing
 chat, draft, attachment tray and transcript anchor. Native menus/sheets remain

@@ -81,6 +81,13 @@ final class ChatModel {
     /// Delayed session-pipe notice; stable until the hub handshake arrives.
     var isReconnecting: Bool { chat.reconnectNotice.isVisible }
 
+    /// Lifecycle actions need a known state: nil until the detail or the
+    /// list row is loaded (the header defaults to inactive before that).
+    var sessionIsActive: Bool? {
+        hub.sessionStore.detail(for: sessionId)?.active
+            ?? hub.sessionStore.sessions.first { $0.id == sessionId }?.active
+    }
+
     // MARK: Wiring
 
     private let hub: HubSession

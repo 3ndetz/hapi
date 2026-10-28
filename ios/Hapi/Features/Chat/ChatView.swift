@@ -23,6 +23,9 @@ struct ChatView: View {
     @State private var scratchlistOpen = false
     @State private var scratchlistEntry: ScratchlistEntry?
     @State private var scratchlistStartsEditing = false
+    @State private var renameOpen = false
+    @State private var renameText = ""
+    @State private var deleteOpen = false
 
     /// Resume/reopen handed back a superseding session id — the host swaps
     /// its navigation entry (HomeView replaces the path element).
@@ -136,6 +139,29 @@ struct ChatView: View {
                             Label("Scratchlist", systemImage: "note.text")
                         }
                     }
+                    Divider()
+                    Button {
+                        renameText = model.header.title
+                        renameOpen = true
+                    } label: {
+                        Label("Rename…", systemImage: "pencil")
+                    }
+                    // Web `SessionActionMenu`: reopen/delete only for a known
+                    // inactive session; a removal closes this chat.
+                    if model.sessionIsActive == false {
+                        Button {
+                            model.interactor.reopenSession()
+                        } label: {
+                            Label("Reopen", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(model.interactor.sessionOpPending)
+                        Button(role: .destructive) {
+                            deleteOpen = true
+                        } label: {
+                            Label("Delete…", systemImage: "trash")
+                        }
+                        .disabled(model.interactor.sessionOpPending)
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -172,6 +198,26 @@ struct ChatView: View {
                 initialEntry: scratchlistEntry,
                 initiallyEditing: scratchlistStartsEditing
             )
+        }
+        .alert("Rename Session", isPresented: $renameOpen) {
+            TextField("Session name", text: $renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                // An untouched title must not freeze an agent-generated one.
+                if name != model.header.title {
+                    model.interactor.renameSession(name)
+                }
+            }
+            .disabled(!SessionNameRules.isValid(renameText))
+        }
+        .alert("Delete Session", isPresented: $deleteOpen) {
+            Button("Delete", role: .destructive) {
+                model.interactor.deleteSession()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(SessionNameRules.deleteMessage(title: model.header.title))
         }
         .toolPresentations(model: model, session: session, owner: "chat") { path in
             viewerRoute = FileViewerRoute(sessionId: sessionId, path: path, mode: .file)

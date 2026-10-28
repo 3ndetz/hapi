@@ -38,6 +38,9 @@ import Observation
 ///   ``setEffort(_:)``/``setCollaborationMode(_:)``/``loadModelOptions()``): catalog pickers with
 ///   optimistic detail updates, rolled forward to server truth on error;
 ///   codex model catalog fetched per session.
+/// - **Lifecycle** (``renameSession(_:)``/``deleteSession()``/
+///   ``reopenSession()``): store-side optimistic rename/delete; a
+///   superseding reopen follows the send-resume hand-off.
 ///
 /// `@Observable` computed surfaces (``composer``, ``queuedRows``, ``config``,
 /// ``permissionOverrides``) read the observable `SessionListStore` and this
@@ -67,6 +70,8 @@ public final class ChatInteractor {
     /// One config POST at a time (compare-and-set, like the Android
     /// `configOpPending`); exposed so the sheet can render a busy state.
     public private(set) var configOpPending = false
+    /// One delete/reopen at a time (the Android `sessionOpPending`).
+    public private(set) var sessionOpPending = false
 
     /// Local focus intent, observed by the composer without changing its draft.
     public private(set) var composerFocusRequest = 0
@@ -823,6 +828,64 @@ public final class ChatInteractor {
                 // may have moved other fields since the optimistic write).
                 _ = try? await self.sessionStore.loadSessionDetail(self.sessionId)
                 self.emit(.notice(Self.errorMessage(error, fallback: "Failed to update session")))
+            }
+        }
+    }
+
+    // MARK: - Session lifecycle
+
+    /// `PATCH /sessions/:id` rename — the store applies the name
+    /// optimistically and rolls forward to server truth on failure.
+    public func renameSession(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.sessionStore.renameSession(sessionId: self.sessionId, name: trimmed)
+            } catch {
+                self.emit(.notice("Failed to rename session"))
+            }
+        }
+    }
+
+    /// `DELETE /sessions/:id` for an inactive session. Success removes the
+    /// row and fires the store's removal callback, which closes this chat;
+    /// a 409 means the session became active again.
+    public func deleteSession() {
+        guard !sessionOpPending else { return }
+        sessionOpPending = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.sessionOpPending = false }
+            do {
+                try await self.sessionStore.deleteSession(sessionId: self.sessionId)
+            } catch {
+                self.emit(.notice(isActiveSessionConflict(error)
+                    ? "Active sessions can't be deleted — archive first"
+                    : "Failed to delete session"))
+            }
+        }
+    }
+
+    /// `POST /sessions/:id/reopen` for an inactive session. A superseding id
+    /// gets the send-resume treatment: window seed + draft move +
+    /// ``ChatInteractionEvent/sessionSuperseded(sessionId:)``.
+    public func reopenSession() {
+        guard !sessionOpPending else { return }
+        sessionOpPending = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.sessionOpPending = false }
+            do {
+                let response = try await self.sessionStore.reopenSession(sessionId: self.sessionId)
+                guard response.sessionId != self.sessionId else { return }
+                await self.windows.seed(fromSessionId: self.sessionId, toSessionId: response.sessionId)
+                self.flushPendingDraft()
+                self.drafts?.move(fromSessionId: self.sessionId, toSessionId: response.sessionId)
+                self.emit(.sessionSuperseded(sessionId: response.sessionId))
+            } catch {
+                self.emit(.notice(formatReopenError(error) ?? "Failed to reopen session"))
             }
         }
     }

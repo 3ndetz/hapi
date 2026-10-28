@@ -201,6 +201,22 @@ final class HomeFilterTestSessions: SessionListStoring {
         sessions = sortSessionSummaries(sessions)
     }
     func archiveSession(sessionId: String) async throws { sessions.removeAll { $0.id == sessionId } }
+    func renameSession(sessionId: String, name: String) async throws {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        sessions[index].metadata?.name = name
+    }
+    /// Scripted lifecycle answers for `SessionLifecycleActionTests`.
+    var deleteError: (any Error)?
+    var reopenError: (any Error)?
+    var reopenTarget: String?
+    func deleteSession(sessionId: String) async throws {
+        if let deleteError { throw deleteError }
+        sessions.removeAll { $0.id == sessionId }
+    }
+    func reopenSession(sessionId: String) async throws -> ReopenSessionResponse {
+        if let reopenError { throw reopenError }
+        return ReopenSessionResponse(ok: true, sessionId: reopenTarget ?? sessionId, resumed: true)
+    }
 }
 
 @MainActor @Observable

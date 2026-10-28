@@ -1102,4 +1102,91 @@ struct ChatInteractorTests {
             await harness.performer.count("POST", pathSuffix: "/api/sessions/sess-1/abort") == 1
         })
     }
+
+    // MARK: Session lifecycle
+
+    @Test func renameTrimsAndPatchesTheNameAndAFailureEmitsANotice() async throws {
+        let harness = try await ChatInteractionHarness()
+
+        harness.interactor.renameSession("  ")
+        harness.interactor.renameSession("  Release prep  ")
+
+        #expect(await eventually {
+            await harness.performer.bodies("PATCH", pathSuffix: "/api/sessions/sess-1") == [#"{"name":"Release prep"}"#]
+        })
+        #expect(harness.store.detail(for: chatSessionID)?.metadata?.name == "Release prep")
+
+        await harness.performer.script("PATCH", "/api/sessions/sess-1", status: 500, json: #"{"error":"boom"}"#)
+        harness.interactor.renameSession("Other")
+        #expect(await eventually { harness.events.contains(.notice("Failed to rename session")) })
+    }
+
+    @Test func deleteConflictReportsArchiveFirstAndSuccessFiresTheRemoval() async throws {
+        let harness = try await ChatInteractionHarness(detail: chatDetail(active: false))
+        var removals: [String] = []
+        harness.store.onSessionRemoved = { removals.append($0) }
+
+        await harness.performer.script(
+            "DELETE", "/api/sessions/sess-1",
+            status: 409, json: #"{"error":"Cannot delete active session. Archive it first."}"#
+        )
+        harness.interactor.deleteSession()
+        #expect(await eventually {
+            harness.events.contains(.notice("Active sessions can't be deleted — archive first"))
+        })
+        #expect(await eventually { !harness.interactor.sessionOpPending })
+        #expect(removals.isEmpty)
+        #expect(harness.store.detail(for: chatSessionID) != nil, "a failed delete restores the detail")
+
+        await harness.performer.script("DELETE", "/api/sessions/sess-1", json: #"{"ok":true}"#)
+        harness.interactor.deleteSession()
+        #expect(await eventually { removals == [chatSessionID] })
+    }
+
+    @Test func reopenWithASupersedingIdMovesTheDraftAndRenavigates() async throws {
+        let harness = try await ChatInteractionHarness(detail: chatDetail(active: false))
+        await harness.performer.serve(
+            "POST", "/api/sessions/sess-1/reopen",
+            json: #"{"ok":true,"sessionId":"sess-2","resumed":true}"#
+        )
+        harness.interactor.setComposerText("unsent words")
+
+        harness.interactor.reopenSession()
+
+        #expect(await eventually { harness.events.contains(.sessionSuperseded(sessionId: "sess-2")) })
+        #expect(harness.drafts.storage["sess-2"] == "unsent words")
+        #expect(harness.drafts.storage[chatSessionID] == nil)
+        #expect(!harness.interactor.sessionOpPending)
+    }
+
+    @Test func reopenInPlaceMarksTheSessionActiveWithoutRenavigating() async throws {
+        let harness = try await ChatInteractionHarness(detail: chatDetail(active: false))
+        await harness.performer.serve(
+            "POST", "/api/sessions/sess-1/reopen",
+            json: #"{"ok":true,"sessionId":"sess-1","resumed":true}"#
+        )
+
+        harness.interactor.reopenSession()
+
+        #expect(await eventually { harness.store.detail(for: chatSessionID)?.active == true })
+        #expect(await eventually { !harness.interactor.sessionOpPending })
+        #expect(!harness.events.contains { event in
+            if case .sessionSuperseded = event { return true }
+            return false
+        })
+    }
+
+    @Test func reopenMissingMetadataSurfacesTheHubMessage() async throws {
+        let harness = try await ChatInteractionHarness(detail: chatDetail(active: false))
+        await harness.performer.serve(
+            "POST", "/api/sessions/sess-1/reopen",
+            status: 422, json: #"{"error":"Session metadata is incomplete","missing":["path","machineId"]}"#
+        )
+
+        harness.interactor.reopenSession()
+
+        #expect(await eventually {
+            harness.events.contains(.notice("Session metadata is incomplete (missing: path, machineId)"))
+        })
+    }
 }

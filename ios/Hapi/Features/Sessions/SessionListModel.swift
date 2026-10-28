@@ -94,7 +94,8 @@ struct SessionListFilters: Equatable, Hashable {
 /// Session-list presentation state over the `HubSession` stores — the iOS
 /// counterpart of the Android reference's `SessionListViewModel`: row/filter
 /// derivation, refresh + offline/loaded flags, last-seen stamping, and
-/// pin/archive forwarding (optimism lives in the store). The SSE
+/// pin/archive/rename/delete/reopen forwarding (optimism lives in the
+/// store). The SSE
 /// subscription itself is owned by `HubSession`, not this model.
 @MainActor @Observable
 final class SessionListModel {
@@ -102,6 +103,9 @@ final class SessionListModel {
     private let machineStore: any MachineListStoring
     private let lastSeenStore: LastSeenStore
     private let hubUrl: String
+    /// Reopen follows a superseding id with the composer draft (web
+    /// `transferComposerDraftThenNavigate`).
+    private let drafts: (any ChatDrafts)?
 
     /// Not persisted: a new home / hub starts with all sessions.
     private(set) var filters = SessionListFilters()
@@ -110,13 +114,14 @@ final class SessionListModel {
     private(set) var isOffline = false
     private(set) var hasRefreshedOnce = false
     @ObservationIgnored private var hasAttemptedRefresh = false
-    /// Transient pin/archive failure for an alert.
+    /// Transient row-action failure for an alert.
     var actionError: String?
 
     convenience init(session: HubSession) {
         self.init(
             sessionStore: session.sessionStore, machineStore: session.machineStore,
-            lastSeenStore: session.lastSeenStore, hubUrl: session.hubUrl
+            lastSeenStore: session.lastSeenStore, hubUrl: session.hubUrl,
+            drafts: UserDefaultsChatDrafts(scope: session.hubUrl)
         )
     }
 
@@ -124,12 +129,14 @@ final class SessionListModel {
         sessionStore: any SessionListStoring,
         machineStore: any MachineListStoring,
         lastSeenStore: LastSeenStore,
-        hubUrl: String
+        hubUrl: String,
+        drafts: (any ChatDrafts)? = nil
     ) {
         self.sessionStore = sessionStore
         self.machineStore = machineStore
         self.lastSeenStore = lastSeenStore
         self.hubUrl = hubUrl
+        self.drafts = drafts
     }
 
     // MARK: - Derived state
@@ -324,6 +331,56 @@ final class SessionListModel {
                     format: String(localized: "Archive failed: %@"),
                     error.localizedDescription
                 )
+            }
+        }
+    }
+
+    /// `PATCH /sessions/:id` with a store-side optimistic name.
+    func renameSession(sessionId: String, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let store = sessionStore
+        Task {
+            do {
+                try await store.renameSession(sessionId: sessionId, name: trimmed)
+            } catch {
+                self.actionError = String(
+                    format: String(localized: "Rename failed: %@"),
+                    error.localizedDescription
+                )
+            }
+        }
+    }
+
+    /// `DELETE /sessions/:id` (inactive sessions only) with store-side
+    /// optimistic removal; a 409 means it became active again.
+    func deleteSession(sessionId: String) {
+        let store = sessionStore
+        Task {
+            do {
+                try await store.deleteSession(sessionId: sessionId)
+            } catch {
+                self.actionError = isActiveSessionConflict(error)
+                    ? String(localized: "Active sessions can't be deleted — archive first")
+                    : String(format: String(localized: "Delete failed: %@"), error.localizedDescription)
+            }
+        }
+    }
+
+    /// `POST /sessions/:id/reopen`, then open the (possibly superseding)
+    /// session, carrying its composer draft along.
+    func reopenSession(sessionId: String, onReopened: @escaping @MainActor (String) -> Void) {
+        let store = sessionStore
+        Task {
+            do {
+                let response = try await store.reopenSession(sessionId: sessionId)
+                if response.sessionId != sessionId {
+                    self.drafts?.move(fromSessionId: sessionId, toSessionId: response.sessionId)
+                }
+                onReopened(response.sessionId)
+            } catch {
+                self.actionError = formatReopenError(error)
+                    ?? String(localized: "Failed to reopen session")
             }
         }
     }

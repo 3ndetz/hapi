@@ -89,7 +89,7 @@ directory browsing and session creation.
 |---|---|
 | Chat and permissions | Streaming messages, history, tool inspection, approvals and question answering on both platforms. |
 | Composer | Text, photos/camera/files, drafts, queued-message actions and steering when supported by the session. |
-| Session controls | Both support pin/archive, stopping a turn and sending to resume an inactive session. Android also exposes Rename, Delete and explicit Reopen actions; iOS currently has no corresponding UI for those three actions. |
+| Session controls | Both support pin, rename, stopping a turn and sending to resume an inactive session. Active sessions can be archived; inactive sessions can be reopened explicitly or deleted. |
 | Files and Git | Open **Session files** from the chat menu to browse/search files, inspect Git status and read diffs. |
 | Scratchlist | On iOS, tap the tray beside the composer attachment button to enter **Save draft** mode; Android uses the chat menu. Text and attachments sync within the session. |
 | Dictation | Record audio, transcribe through a configured hub provider, then edit the inserted text before sending. |

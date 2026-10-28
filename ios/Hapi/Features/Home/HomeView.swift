@@ -76,8 +76,13 @@ struct HomeView: View {
             openSession(sessionId)
         }
         .onChange(of: session.sessionRemoval) { _, removal in
-            guard usesSplitNavigation, let removal else { return }
-            tabletNavigation.remove(removal.sessionId)
+            guard let removal else { return }
+            if usesSplitNavigation {
+                tabletNavigation.remove(removal.sessionId)
+            } else if let index = path.firstIndex(of: removal.sessionId) {
+                // Deleted or archived elsewhere: leave the emptied chat.
+                path.removeSubrange(index...)
+            }
         }
         .sheet(isPresented: $model.showAddHub) {
             PairingFlowView(context: .addHub)

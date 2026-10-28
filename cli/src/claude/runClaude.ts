@@ -186,6 +186,21 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
                 currentSession.localContextModel = data.to_model;
             }
 
+            // Local mode has no SDK stream; derive thinking from turn hooks.
+            // PreToolUse also covers a turn HAPI attached to mid-flight.
+            if (currentSession?.mode === 'local' && sessionId === currentSession.sessionId) {
+                const event = data.hook_event_name;
+                if (event === 'UserPromptSubmit') {
+                    currentSession.localTurnStartedAt = Date.now();
+                }
+                const thinking = event === 'UserPromptSubmit' || event === 'PreToolUse' ? true
+                    : event === 'Stop' || event === 'StopFailure' || event === 'SessionEnd' ? false
+                    : currentSession.thinking;
+                if (thinking !== currentSession.thinking) {
+                    currentSession.onThinkingChange(thinking);
+                }
+            }
+
             // Inherit the mode the user picked inside the interactive TUI
             // (shift+tab) so a later local→remote switch keeps it. Only the
             // local settings file registers the hooks that carry

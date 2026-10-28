@@ -28,6 +28,8 @@ type HookSettings = {
         PostModelSwitch?: HookCommandConfig[];
         PostToolUse?: HookCommandConfig[];
         PostToolUseFailure?: HookCommandConfig[];
+        Stop?: HookCommandConfig[];
+        StopFailure?: HookCommandConfig[];
         SessionEnd?: HookCommandConfig[];
     };
 };
@@ -79,6 +81,8 @@ export function buildHookSettings(
         }];
         hooks.PostToolUse = [{ matcher: '*', ...commandHook }];
         hooks.PostToolUseFailure = [{ matcher: '*', ...commandHook }];
+        hooks.Stop = [commandHook];
+        hooks.StopFailure = [commandHook];
         hooks.SessionEnd = [{ matcher: '*', ...commandHook }];
     }
 

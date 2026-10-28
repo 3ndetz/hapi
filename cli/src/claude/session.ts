@@ -27,6 +27,8 @@ export class Session extends AgentSessionBase<EnhancedMode> {
     localLaunchFailure: LocalLaunchFailure | null = null;
     /** Model the local TUI runs, "[1m]" suffix intact: launch seed, then PostModelSwitch. */
     localContextModel: string | null = null;
+    /** Epoch ms of the latest local UserPromptSubmit hook; older interrupt markers are stale. */
+    localTurnStartedAt = 0;
     private nativeSkillNames = new Set<string>();
 
     constructor(opts: {

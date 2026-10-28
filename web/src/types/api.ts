@@ -63,6 +63,7 @@ export type {
 export type {
     AgentState,
     AttachmentMetadata,
+    BackgroundTask,
     CodexCollaborationMode,
     CopilotAgentMode,
     Metadata,

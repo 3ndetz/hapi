@@ -1521,15 +1521,13 @@ function SessionChatInner(props: SessionChatProps) {
             goal: reduced.latestGoal,
             tasks: props.session.todos,
             blocks: reconciled.blocks,
-            messages: normalizedMessages,
-            backgroundTaskCount: props.session.backgroundTaskCount
+            backgroundTasks: props.session.backgroundTasks
         }),
         [
             reduced.latestGoal,
             props.session.todos,
-            props.session.backgroundTaskCount,
-            reconciled.blocks,
-            normalizedMessages
+            props.session.backgroundTasks,
+            reconciled.blocks
         ]
     )
     const hasRunningChildAgent = useMemo(

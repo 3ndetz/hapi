@@ -978,7 +978,7 @@ describe('session model', () => {
         expect(activity[0].updatedAt).toBe(messages[0]?.createdAt)
     })
 
-    it('sets backgroundTaskCount from Claude background_tasks_changed snapshots', () => {
+    it('sets background tasks from Claude background_tasks_changed snapshots', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
         const cache = new SessionCache(store, createPublisher(events))
@@ -1002,7 +1002,7 @@ describe('session model', () => {
                 return stored ? { ok: true, value: stored } : { ok: false, reason: 'not-found' }
             },
             emitAccessError: () => {},
-            onBackgroundTaskCount: (sessionId, count) => cache.setBackgroundTaskCount(sessionId, count)
+            onBackgroundTasks: (sessionId, tasks) => cache.setBackgroundTasks(sessionId, tasks)
         })
         const send = (data: unknown) => handlers.get('message')?.({
             sid: session.id,
@@ -1012,11 +1012,15 @@ describe('session model', () => {
             type: 'system',
             subtype: 'background_tasks_changed',
             uuid: `snapshot-${taskIds.length}`,
-            tasks: taskIds.map((task_id) => ({ task_id, task_type: 'local_bash' }))
+            tasks: taskIds.map((task_id) => ({ task_id, task_type: 'local_bash', description: `run ${task_id}` }))
         })
 
         snapshot(['b1', 'b2'])
         expect(cache.getSession(session.id)?.backgroundTaskCount).toBe(2)
+        expect(cache.getSession(session.id)?.backgroundTasks).toEqual([
+            { id: 'b1', type: 'local_bash', description: 'run b1' },
+            { id: 'b2', type: 'local_bash', description: 'run b2' }
+        ])
 
         // The Bash tool result that announces a background task is not a count signal.
         send({

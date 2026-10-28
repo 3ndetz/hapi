@@ -8,7 +8,7 @@ import XCTest
 
 @MainActor
 final class ManualEntryPresentationTests: XCTestCase {
-    @Observable
+    @Observable @MainActor
     fileprivate final class Driver {
         var isPairing = false
         var failure: PairingFailure?
@@ -294,6 +294,14 @@ final class ManualEntryPresentationTests: XCTestCase {
             let window = try makeWindow(Harness(driver: driver, locale: Locale(identifier: locale), typeSize: typeSize), width: 320)
             defer { window.isHidden = true }
             try await settle()
+            // Keep 320pt of usable form width when the device has side chrome.
+            let horizontalInsets = window.safeAreaInsets.left + window.safeAreaInsets.right
+            if horizontalInsets > 0 {
+                window.frame.size.width = 320 + horizontalInsets
+                window.layoutIfNeeded()
+                try await settle()
+            }
+            XCTAssertEqual(window.bounds.inset(by: window.safeAreaInsets).width, 320, accuracy: 1)
             let address = try field(.address, in: window)
             let rect = address.convert(address.bounds, to: window)
             XCTAssertGreaterThanOrEqual(rect.height, 44)

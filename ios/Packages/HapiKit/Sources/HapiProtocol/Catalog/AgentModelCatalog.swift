@@ -143,6 +143,115 @@ public enum AgentModelCatalog {
             + list.map { NewSessionOption(value: $0, label: $0) }
     }
 
+    // MARK: - Session settings
+
+    /// The current model as a picker value. Pi resolves `provider/modelId`
+    /// (metadata first, then the bare id); cursor collapses its auto
+    /// aliases; flavors without a Default row show the running model.
+    public static func sessionCurrentModel(
+        flavor: AgentFlavor,
+        response: AgentModelsResponse,
+        sessionModel: String?,
+        piSelectedModel: PiModelReference?
+    ) -> String? {
+        switch flavor {
+        case .pi:
+            if let reference = piSelectedModel {
+                return "\(reference.provider)/\(reference.modelId)"
+            }
+            guard let id = sessionModel ?? response.currentModelId else { return nil }
+            return listedModels(response, flavor: .pi)
+                .first { $0.modelId == id }
+                .map { modelValue($0, flavor: .pi) } ?? id
+        case .cursor:
+            let normalized = sessionModel?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+            return ["", "auto", "default", "default[]"].contains(normalized) ? "auto" : sessionModel
+        case .opencode, .agy:
+            return sessionModel ?? response.currentModelId
+        default:
+            return sessionModel
+        }
+    }
+
+    /// In-session model rows (web `getModelOptionsForFlavor`). `nil` clears
+    /// to the agent default where the flavor offers that; opencode, agy and
+    /// pi only switch between listed models. Empty hides the picker.
+    public static func sessionModelOptions(
+        flavor: AgentFlavor,
+        response: AgentModelsResponse,
+        currentModel: String?
+    ) -> [CatalogOption] {
+        let rows = listedModels(response, flavor: flavor).map { model in
+            CatalogOption(value: modelValue(model, flavor: flavor), label: modelLabel(model, flavor: flavor))
+        }
+        let options: [CatalogOption]
+        switch flavor {
+        case .opencode, .agy, .pi:
+            options = rows
+        case .dsh:
+            options = rows.isEmpty ? [] : [CatalogOption(value: nil, label: "Default")] + rows
+        case .copilot:
+            options = [CatalogOption(value: nil, label: "Auto")] + rows
+        case .cursor:
+            // Cursor's Auto is an explicit wire id.
+            options = rows.isEmpty ? [] : [CatalogOption(value: "auto", label: "Auto")] + rows
+        case .grok, .kimi:
+            options = [CatalogOption(value: nil, label: "Default")] + rows
+        default:
+            options = []
+        }
+        return withCurrentModelOption(options, current: currentModel)
+    }
+
+    /// `withCurrentModelOption`: an unlisted current model stays visible,
+    /// right after the Default/Auto row.
+    public static func withCurrentModelOption(_ options: [CatalogOption], current: String?) -> [CatalogOption] {
+        guard !options.isEmpty, let current, !current.isEmpty, current != "auto",
+              !options.contains(where: { $0.value == current }) else { return options }
+        let first = options[0].value
+        var next = options
+        next.insert(CatalogOption(value: current, label: current), at: first == nil || first == "auto" ? 1 : 0)
+        return next
+    }
+
+    /// Grok in-session efforts (`grok-reasoning-effort-options`).
+    public static func grokSessionEffortOptions(_ response: ReasoningEffortOptionsResponse) -> [CatalogOption] {
+        guard response.success, let options = response.options, !options.isEmpty else { return [] }
+        return [CatalogOption(value: nil, label: "Default")]
+            + options.map { CatalogOption(value: $0.value, label: $0.name ?? $0.value) }
+    }
+
+    /// OpenCode in-session reasoning efforts. Empty (hidden) while the
+    /// options still describe another model than the session's.
+    public static func opencodeSessionEffortOptions(
+        _ response: ReasoningEffortOptionsResponse,
+        sessionModel: String?,
+        currentValue: String?
+    ) -> [CatalogOption] {
+        guard response.success, let options = response.options, !options.isEmpty,
+              response.currentModelId == (sessionModel ?? response.targetModelId) else { return [] }
+        var result = [CatalogOption(value: nil, label: "Default")]
+        if let currentValue, !options.contains(where: { $0.value == currentValue }) {
+            result.append(CatalogOption(value: currentValue, label: ModelCatalog.capitalizedFirst(currentValue)))
+        }
+        return result + options.map {
+            CatalogOption(value: $0.value, label: $0.name ?? ModelCatalog.capitalizedFirst($0.value))
+        }
+    }
+
+    /// Pi in-session thinking levels of the current model (no Default row);
+    /// nil while the model is unresolved or has no thinking levels.
+    public static func piSessionEffortOptions(
+        response: AgentModelsResponse,
+        currentModel: String?
+    ) -> [CatalogOption]? {
+        guard let model = selectedModel(response, flavor: .pi, value: currentModel),
+              model.reasoning != false else { return nil }
+        return piThinkingLevels(map: model.thinkingLevelMap).map {
+            CatalogOption(value: $0, label: piThinkingLevelLabel($0))
+        }
+    }
+
     // MARK: - Pi thinking levels (`shared/src/piThinkingLevel.ts`)
 
     public static let piThinkingLevelOrder = ["off", "minimal", "low", "medium", "high", "xhigh", "max"]

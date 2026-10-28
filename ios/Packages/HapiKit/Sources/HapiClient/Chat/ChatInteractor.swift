@@ -67,6 +67,10 @@ public final class ChatInteractor {
     public private(set) var windowState: MessageWindowState?
     /// Codex model catalog load state (feeds ``config``).
     public private(set) var codexModels: CodexModelsState = .idle
+    /// Discovered-agent model catalog (feeds ``config``).
+    public private(set) var agentModels: AgentCatalogLoadState = .idle
+    /// Grok/opencode in-session effort options (feeds ``config``).
+    public private(set) var agentEfforts: ReasoningEffortOptionsResponse?
     /// One config POST at a time (compare-and-set, like the Android
     /// `configOpPending`); exposed so the sheet can render a busy state.
     public private(set) var configOpPending = false
@@ -719,7 +723,9 @@ public final class ChatInteractor {
         buildSessionConfigState(
             detail: sessionStore.detail(for: sessionId),
             summary: sessionStore.sessions.first { $0.id == sessionId },
-            codexModels: codexModels
+            codexModels: codexModels,
+            agentModels: agentModels,
+            agentEfforts: agentEfforts
         )
     }
 
@@ -746,13 +752,35 @@ public final class ChatInteractor {
         )
     }
 
-    /// `POST /model` — nil clears back to the agent default.
+    /// `POST /model` — nil clears back to the agent default. Pi switches
+    /// with a `{provider, modelId}` reference; grok/opencode efforts are
+    /// per model, so their options reload afterwards.
     public func setModel(_ model: String?) {
         let api = api
         let sessionId = sessionId
+        let agent = currentFlavor().map(AgentFlavor.init(rawValue:))
+        var selection = model.map(ModelSelection.id)
+        var reference: PiModelReference?
+        if agent == .pi, let model, case .loaded(let response) = agentModels,
+           let row = AgentModelCatalog.selectedModel(response, flavor: .pi, value: model),
+           let provider = row.provider {
+            reference = PiModelReference(provider: provider, modelId: row.modelId)
+            selection = .catalogReference(provider: provider, modelId: row.modelId)
+        }
+        let wireSelection = selection
         runConfigChange(
-            optimistic: { $0.model = model },
-            call: { try await api.setModel(sessionId: sessionId, model: model.map(ModelSelection.id)) }
+            optimistic: { session in
+                if let reference {
+                    session.model = reference.modelId
+                    session.metadata?.piSelectedModel = reference
+                } else {
+                    session.model = model
+                }
+            },
+            call: { try await api.setModel(sessionId: sessionId, model: wireSelection) },
+            onSuccess: { [weak self] in
+                if agent == .grok || agent == .opencode { self?.loadEffortOptions(force: true) }
+            }
         )
     }
 
@@ -784,8 +812,15 @@ public final class ChatInteractor {
         )
     }
 
-    /// Fetch the codex model catalog for the picker (no-op for other flavors).
+    /// Fetch the model catalog for the picker: codex per session, the
+    /// discovered agents per session (agy per machine), plus grok/opencode
+    /// effort options. Live sessions only for discovered agents; grok and
+    /// copilot also skip terminal-controlled ones (web query gates).
     public func loadModelOptions() {
+        if let flavor = currentFlavor(), flavor != "codex" {
+            loadAgentModels(AgentFlavor(rawValue: flavor))
+            return
+        }
         guard currentFlavor() == "codex" else { return }
         switch codexModels {
         case .loading, .loaded:
@@ -811,9 +846,68 @@ public final class ChatInteractor {
         }
     }
 
+    private func loadAgentModels(_ agent: AgentFlavor) {
+        guard AgentModelCatalog.scope(for: agent) != nil, catalogQueriesAllowed(agent) else { return }
+        loadEffortOptions(force: false)
+        switch agentModels {
+        case .loading, .loaded:
+            return
+        case .idle, .failed:
+            break
+        }
+        let machineId = sessionStore.detail(for: sessionId)?.metadata?.machineId
+            ?? sessionStore.sessions.first { $0.id == sessionId }?.metadata?.machineId
+        // agy has no session route; its catalog is the machine's.
+        if agent == .agy, machineId == nil { return }
+        agentModels = .loading
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let response = if agent == .agy, let machineId {
+                    try await self.api.machineAgentModels(machineId: machineId, flavor: .agy)
+                } else {
+                    try await self.api.sessionAgentModels(sessionId: self.sessionId, flavor: agent)
+                }
+                if response.success {
+                    self.agentModels = .loaded(response)
+                } else {
+                    self.emit(.notice(response.error ?? "Failed to load models"))
+                    self.agentModels = .failed
+                }
+            } catch {
+                self.emit(.notice(Self.errorMessage(error, fallback: "Failed to load models")))
+                self.agentModels = .failed
+            }
+        }
+    }
+
+    /// Grok/opencode effort options; best effort (a failure hides the field).
+    private func loadEffortOptions(force: Bool) {
+        guard let agent = currentFlavor().map(AgentFlavor.init(rawValue:)),
+              agent == .grok || agent == .opencode,
+              catalogQueriesAllowed(agent),
+              force || agentEfforts == nil else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            self.agentEfforts = try? await self.api.sessionReasoningEffortOptions(
+                sessionId: self.sessionId,
+                flavor: agent
+            )
+        }
+    }
+
+    private func catalogQueriesAllowed(_ agent: AgentFlavor) -> Bool {
+        let detail = sessionStore.detail(for: sessionId)
+        guard currentSessionState().active else { return false }
+        let controlledByUser = detail?.agentState?.controlledByUser == true
+            && detail?.metadata?.capabilities?.concurrentClients != true
+        return !(controlledByUser && (agent == .grok || agent == .copilot))
+    }
+
     private func runConfigChange(
         optimistic: (inout Session) -> Void,
-        call: @escaping @Sendable () async throws -> Void
+        call: @escaping @Sendable () async throws -> Void,
+        onSuccess: (@MainActor () -> Void)? = nil
     ) {
         guard !configOpPending else { return }
         configOpPending = true
@@ -823,6 +917,7 @@ public final class ChatInteractor {
             defer { self.configOpPending = false }
             do {
                 try await call()
+                onSuccess?()
             } catch {
                 // Roll back by rolling forward to server truth (an SSE patch
                 // may have moved other fields since the optimistic write).

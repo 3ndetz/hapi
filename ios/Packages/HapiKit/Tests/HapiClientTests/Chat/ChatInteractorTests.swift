@@ -1103,6 +1103,73 @@ struct ChatInteractorTests {
         })
     }
 
+    // MARK: Discovered agent catalogs
+
+    @Test func grokLoadsModelsAndEffortsAndReloadsEffortsAfterAModelSwitch() async throws {
+        let harness = try await ChatInteractionHarness(detail: chatDetail(flavor: "grok", model: "grok-4"))
+        await harness.performer.serve(
+            "GET", "/api/sessions/sess-1/grok-models",
+            json: #"{"success":true,"availableModels":[{"modelId":"grok-4","name":"Grok 4"},{"modelId":"grok-mini"}]}"#
+        )
+        await harness.performer.serve(
+            "GET", "/api/sessions/sess-1/grok-reasoning-effort-options",
+            json: #"{"success":true,"options":[{"value":"high","name":"High"}]}"#
+        )
+
+        harness.interactor.loadModelOptions()
+
+        #expect(await eventually { harness.interactor.config.modelOptions?.count == 3 })
+        #expect(harness.interactor.config.modelOptions?.first == CatalogOption(value: nil, label: "Default"))
+        #expect(await eventually { harness.interactor.config.effortOptions?.map(\.value) == [nil, "high"] })
+
+        harness.interactor.setModel("grok-mini")
+        #expect(await eventually {
+            await harness.performer.bodies("POST", pathSuffix: "/api/sessions/sess-1/model") == [#"{"model":"grok-mini"}"#]
+        })
+        #expect(await eventually {
+            await harness.performer.count("GET", pathSuffix: "/grok-reasoning-effort-options") == 2
+        })
+    }
+
+    @Test func discoveredCatalogsSkipInactiveAndTerminalControlledSessions() async throws {
+        let inactive = try await ChatInteractionHarness(detail: chatDetail(flavor: "kimi", active: false))
+        inactive.interactor.loadModelOptions()
+        var controlled = chatDetail(flavor: "copilot", agentState: AgentState(controlledByUser: true))
+        controlled.metadata?.capabilities = nil
+        let terminal = try await ChatInteractionHarness(detail: controlled)
+        terminal.interactor.loadModelOptions()
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(await inactive.performer.count("GET", pathSuffix: "/kimi-models") == 0)
+        #expect(await terminal.performer.count("GET", pathSuffix: "/copilot-models") == 0)
+        #expect(inactive.interactor.config.modelOptions == nil)
+    }
+
+    @Test func agyReadsTheMachineCatalogAndPiSwitchesWithAProviderReference() async throws {
+        var agyDetail = chatDetail(flavor: "agy")
+        agyDetail.metadata?.machineId = "mach-1"
+        let agy = try await ChatInteractionHarness(detail: agyDetail)
+        await agy.performer.serve(
+            "GET", "/api/machines/mach-1/agy-models",
+            json: #"{"success":true,"availableModels":[{"modelId":"gemini-3.7-flash-high"}]}"#
+        )
+        agy.interactor.loadModelOptions()
+        #expect(await eventually { agy.interactor.config.modelOptions?.map(\.value) == ["gemini-3.7-flash-high"] })
+
+        let pi = try await ChatInteractionHarness(detail: chatDetail(flavor: "pi", model: "m"))
+        await pi.performer.serve(
+            "GET", "/api/sessions/sess-1/pi-models",
+            json: #"{"success":true,"availableModels":[{"modelId":"m","provider":"a"},{"modelId":"n","provider":"b"}]}"#
+        )
+        pi.interactor.loadModelOptions()
+        #expect(await eventually { pi.interactor.config.model == "a/m" })
+        pi.interactor.setModel("b/n")
+        #expect(await eventually {
+            await pi.performer.bodies("POST", pathSuffix: "/api/sessions/sess-1/model")
+                == [#"{"model":{"modelId":"n","provider":"b"}}"#]
+        })
+        #expect(pi.store.detail(for: chatSessionID)?.metadata?.piSelectedModel == PiModelReference(provider: "b", modelId: "n"))
+    }
+
     // MARK: Session lifecycle
 
     @Test func renameTrimsAndPatchesTheNameAndAFailureEmitsANotice() async throws {

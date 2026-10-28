@@ -151,6 +151,106 @@ struct AgentModelCatalogTests {
     }
 }
 
+@Suite("Agent model catalogs in session settings")
+struct AgentSessionConfigTests {
+    private func detail(
+        flavor: String,
+        model: String? = nil,
+        effort: String? = nil,
+        modelReasoningEffort: String? = nil,
+        active: Bool = true,
+        piSelectedModel: PiModelReference? = nil
+    ) -> Session {
+        Session(
+            id: "s1", namespace: "default", seq: 1, createdAt: 1, updatedAt: 1,
+            active: active, activeAt: 1,
+            metadata: SessionMetadata(path: "/repo", host: "box", flavor: flavor, piSelectedModel: piSelectedModel),
+            metadataVersion: 1, agentState: nil, agentStateVersion: 1, thinking: false, thinkingAt: 0,
+            model: model, modelReasoningEffort: modelReasoningEffort, effort: effort
+        )
+    }
+
+    @Test func rowsPerFlavorKeepAnUnlistedCurrentModelVisible() {
+        let response = AgentModelsResponse(success: true, availableModels: [
+            AgentModelSummary(modelId: "a", name: "A"),
+            AgentModelSummary(modelId: "b"),
+        ], currentModelId: "b")
+        #expect(AgentModelCatalog.sessionModelOptions(flavor: .grok, response: response, currentModel: "old")
+            == [CatalogOption(value: nil, label: "Default"), CatalogOption(value: "old", label: "old"),
+                CatalogOption(value: "a", label: "A"), CatalogOption(value: "b", label: "b")])
+        #expect(AgentModelCatalog.sessionModelOptions(flavor: .opencode, response: response, currentModel: "b").map(\.value)
+            == ["a", "b"])
+        #expect(AgentModelCatalog.sessionModelOptions(flavor: .dsh, response: AgentModelsResponse(success: true), currentModel: nil)
+            .isEmpty)
+        #expect(AgentModelCatalog.sessionModelOptions(flavor: .cursor, response: response, currentModel: "auto").first
+            == CatalogOption(value: "auto", label: "Auto"))
+        #expect(AgentModelCatalog.sessionCurrentModel(flavor: .cursor, response: response, sessionModel: "default[]", piSelectedModel: nil)
+            == "auto")
+        #expect(AgentModelCatalog.sessionCurrentModel(flavor: .opencode, response: response, sessionModel: nil, piSelectedModel: nil)
+            == "b")
+    }
+
+    @Test func discoveredFlavorsStayHiddenUntilLoadedAndWhileInactive() {
+        let idle = buildSessionConfigState(detail: detail(flavor: "kimi"), summary: nil, codexModels: .idle)
+        #expect(idle.modelOptions == nil)
+        let loading = buildSessionConfigState(detail: detail(flavor: "kimi"), summary: nil, codexModels: .idle,
+                                              agentModels: .loading)
+        #expect(loading.modelOptionsLoading)
+        let failed = buildSessionConfigState(detail: detail(flavor: "kimi"), summary: nil, codexModels: .idle,
+                                             agentModels: .failed)
+        #expect(failed.modelLoadFailed)
+        let inactive = buildSessionConfigState(detail: detail(flavor: "kimi", active: false), summary: nil,
+                                               codexModels: .idle, agentModels: .failed)
+        #expect(inactive.modelOptions == nil && !inactive.modelLoadFailed)
+    }
+
+    @Test func grokAndOpencodeEffortsComeFromTheirOptionRoutes() {
+        let grok = buildSessionConfigState(
+            detail: detail(flavor: "grok", effort: "high"), summary: nil, codexModels: .idle,
+            agentModels: .loaded(AgentModelsResponse(success: true)),
+            agentEfforts: ReasoningEffortOptionsResponse(success: true, options: [AgentReasoningEffortOption(value: "high", name: "High")])
+        )
+        #expect(grok.effort == "high")
+        #expect(grok.effortOptions == [CatalogOption(value: nil, label: "Default"), CatalogOption(value: "high", label: "High")])
+
+        let stale = ReasoningEffortOptionsResponse(success: true, options: [AgentReasoningEffortOption(value: "max")],
+                                                   currentModelId: "old", targetModelId: "new")
+        let opencode = buildSessionConfigState(
+            detail: detail(flavor: "opencode", model: "new", modelReasoningEffort: "low"), summary: nil,
+            codexModels: .idle, agentModels: .loaded(AgentModelsResponse(success: true)), agentEfforts: stale
+        )
+        #expect(opencode.effortOptions == [], "options for another model stay hidden")
+        var settled = stale
+        settled.currentModelId = "new"
+        let ready = buildSessionConfigState(
+            detail: detail(flavor: "opencode", model: "new", modelReasoningEffort: "low"), summary: nil,
+            codexModels: .idle, agentModels: .loaded(AgentModelsResponse(success: true)), agentEfforts: settled
+        )
+        #expect(ready.effortOptions?.map(\.value) == [nil, "low", "max"])
+    }
+
+    @Test func piResolvesTheProviderAndItsThinkingLevels() {
+        let response = AgentModelsResponse(success: true, availableModels: [
+            AgentModelSummary(modelId: "m", name: "M", provider: "a", reasoning: true, thinkingLevelMap: ["off": nil]),
+            AgentModelSummary(modelId: "m", name: "M", provider: "b", reasoning: false),
+        ])
+        let fromMetadata = buildSessionConfigState(
+            detail: detail(flavor: "pi", model: "m", effort: "low", piSelectedModel: PiModelReference(provider: "b", modelId: "m")),
+            summary: nil, codexModels: .idle, agentModels: .loaded(response)
+        )
+        #expect(fromMetadata.model == "b/m")
+        #expect(fromMetadata.modelOptions?.map(\.value) == ["a/m", "b/m"])
+        #expect(fromMetadata.effortOptions == nil, "b/m has no thinking levels")
+
+        let fromBareId = buildSessionConfigState(
+            detail: detail(flavor: "pi", model: "m", effort: "low"),
+            summary: nil, codexModels: .idle, agentModels: .loaded(response)
+        )
+        #expect(fromBareId.model == "a/m")
+        #expect(fromBareId.effortOptions?.map(\.value) == ["minimal", "low", "medium", "high"])
+    }
+}
+
 @Suite("Agent model endpoints")
 struct AgentModelEndpointTests {
     @Test func machineAndSessionRoutesCarryFlavorAndCwd() async throws {

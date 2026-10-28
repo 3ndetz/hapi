@@ -445,7 +445,15 @@ TEST_RUNNER_HAPI_TYPOGRAPHY_CAPTURE=/tmp/hapi-typography-review \
 The chat gear presents a single-page model/effort and permission/collaboration
 form. All selections use native menus; permission explanations, high-risk
 indicators, model-loading/retry states and update feedback remain in the form.
-Changes apply immediately; Done only dismisses. On regular-width windows the
+Changes apply immediately; Done only dismisses. Models follow each agent's
+catalog: Claude presets, the Codex session catalog, and for live sessions the
+`/api/sessions/:id/<flavor>-models` routes (agy uses its machine catalog; grok
+and copilot skip terminal-controlled sessions). Copilot, cursor, dsh, grok and
+kimi offer a Default/Auto row; opencode, agy and pi switch between listed
+models only, and Pi switches with a `{provider, modelId}` reference. Grok and
+OpenCode efforts come from their `*-reasoning-effort-options` routes (OpenCode
+hides options that still describe the previous model); Pi shows the current
+model's thinking levels. On regular-width windows the
 production toolbar button anchors an iPad popover; compact windows adapt that
 same presenter to a medium/large sheet (large for accessibility text).
 

@@ -107,6 +107,16 @@ completion, and clearing the input while machine health updates arrive. A
 restored or selected offline machine stays selected until the user chooses an
 online machine; its old path is never silently moved to another host.
 
+New-session model pickers cover every creatable agent. Claude uses static
+presets and Codex the machine catalog; agy, cursor, dsh and pi load
+`/api/machines/:id/<flavor>-models`, while copilot, grok, kimi and opencode
+probe the same route with `cwd` once the directory exists. Grok efforts, Pi
+thinking levels and OpenCode variants follow the selected model; a restored
+selection the catalog no longer offers falls back to Default, and Create waits
+while a non-default selection is still being validated. Cursor lists ACP model
+ids flat (no web-style variant drill-down) and always sends `model`.
+`AgentModelCatalogTests` covers the option builders and reconciliation.
+
 ## Pairing
 
 The app supports multiple hubs with one active selection. See the

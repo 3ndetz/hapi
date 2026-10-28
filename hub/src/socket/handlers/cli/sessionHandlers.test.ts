@@ -27,7 +27,7 @@ class FakeSocket {
     }
 }
 
-it('does not rebroadcast stored messages or repeated consumption acknowledgements', () => {
+it('does not rebroadcast stored messages and retains repeated consumption acknowledgements', () => {
     const store = new Store(':memory:')
     const session = store.sessions.getOrCreateSession('dedupe-replay', {}, null, 'default')
     const socket = new FakeSocket()
@@ -43,7 +43,7 @@ it('does not rebroadcast stored messages or repeated consumption acknowledgement
     socket.trigger('message', message)
     socket.trigger('messages-consumed', { sid: session.id, localIds: ['stable-1'] })
     expect(events.filter(event => event.type === 'message-received')).toHaveLength(1)
-    expect(events.filter(event => event.type === 'messages-consumed')).toHaveLength(1)
+    expect(events.filter(event => event.type === 'messages-consumed')).toHaveLength(2)
     expect(progress).toHaveBeenCalledTimes(1)
     expect(store.messages.getAllMessages(session.id)).toHaveLength(1)
     store.close()

@@ -437,7 +437,6 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
             emitAccessError('session', data.sid, sessionAccess.reason)
             return
         }
-        if (!data.steered && !data.clearQueuedThinkingGrace && localIds.every(id => store.messages.lookupQueuedMessage(data.sid, id).status === 'invoked')) return
         const invokedAt = Date.now()
         let sessionUpdatedAt: number
         try {

@@ -71,6 +71,10 @@ public final class ChatInteractor {
     public private(set) var agentModels: AgentCatalogLoadState = .idle
     /// Grok/opencode in-session effort options (feeds ``config``).
     public private(set) var agentEfforts: ReasoningEffortOptionsResponse?
+    /// `GET /slash-commands` result: nil until loaded; a failure retries on
+    /// the next `/`.
+    private var slashCommandsFetched: [SlashCommand]?
+    private var slashCommandsLoading = false
     /// One config POST at a time (compare-and-set, like the Android
     /// `configOpPending`); exposed so the sheet can render a busy state.
     public private(set) var configOpPending = false
@@ -193,7 +197,30 @@ public final class ChatInteractor {
         )
     }
 
+    /// Slash-command dropdown rows: non-empty only while the composer is a
+    /// lone `/token`; metadata names merged with the RPC list (RPC wins).
+    public var slashSuggestions: [SlashCommand] {
+        guard composerDestination == .chat,
+              let query = SlashCommandSuggestions.query(of: composerText) else { return [] }
+        let names = sessionStore.detail(for: sessionId)?.metadata?.slashCommands
+        return SlashCommandSuggestions.filter(
+            SlashCommandSuggestions.merge(metadataNames: names, fetched: slashCommandsFetched),
+            query: query
+        )
+    }
+
+    /// Dropdown tap: replace the token with `/name ` ready for arguments.
+    public func selectSlashCommand(_ command: SlashCommand) {
+        setComposerText("/\(command.name) ")
+    }
+
     public func setComposerText(_ text: String) {
+        // Fetch on the transition INTO slash mode (web refetches when the
+        // menu opens) — never per keystroke, so a wedged CLI is not hammered.
+        if SlashCommandSuggestions.query(of: text) != nil,
+           SlashCommandSuggestions.query(of: composerText) == nil {
+            loadSlashCommands()
+        }
         composerText = text
         draftTask?.cancel()
         guard let drafts else { return }
@@ -924,6 +951,22 @@ public final class ChatInteractor {
                 _ = try? await self.sessionStore.loadSessionDetail(self.sessionId)
                 self.emit(.notice(Self.errorMessage(error, fallback: "Failed to update session")))
             }
+        }
+    }
+
+    // MARK: - Slash commands
+
+    /// Once per screen (near-static list); RPC failure is silent — the
+    /// metadata names still populate the menu.
+    private func loadSlashCommands() {
+        guard slashCommandsFetched == nil, !slashCommandsLoading else { return }
+        slashCommandsLoading = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.slashCommandsLoading = false }
+            guard let response = try? await self.api.slashCommands(sessionId: self.sessionId),
+                  response.success, let commands = response.commands else { return }
+            self.slashCommandsFetched = commands
         }
     }
 

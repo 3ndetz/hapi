@@ -1103,6 +1103,33 @@ struct ChatInteractorTests {
         })
     }
 
+    // MARK: Slash commands
+
+    @Test func slashSuggestionsLoadOnceWhenEnteringSlashMode() async throws {
+        var detail = chatDetail()
+        detail.metadata?.slashCommands = ["deploy"]
+        let harness = try await ChatInteractionHarness(detail: detail)
+        await harness.performer.serve(
+            "GET", "/api/sessions/sess-1/slash-commands",
+            json: #"{"success":true,"commands":[{"name":"compact","description":"Summarize","source":"builtin"}]}"#
+        )
+
+        harness.interactor.setComposerText("/")
+        #expect(harness.interactor.slashSuggestions.map(\.name).first == "deploy")
+        #expect(await eventually { harness.interactor.slashSuggestions.map(\.name) == ["deploy", "compact"] })
+        harness.interactor.setComposerText("/co")
+        harness.interactor.setComposerText("/com")
+        #expect(harness.interactor.slashSuggestions.map(\.name) == ["compact"])
+
+        harness.interactor.selectSlashCommand(SlashCommand(name: "compact", source: "builtin"))
+        #expect(harness.interactor.composerText == "/compact ")
+        #expect(harness.interactor.slashSuggestions.isEmpty, "arguments close the menu")
+        harness.interactor.setComposerText("")
+        harness.interactor.setComposerText("/")
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(await harness.performer.count("GET", pathSuffix: "/slash-commands") == 1)
+    }
+
     // MARK: Discovered agent catalogs
 
     @Test func grokLoadsModelsAndEffortsAndReloadsEffortsAfterAModelSwitch() async throws {

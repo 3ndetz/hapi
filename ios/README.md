@@ -10,7 +10,7 @@ This README covers development builds.
 ## Current capabilities
 
 The app provides sessions/chat, approvals and questions, new sessions,
-attachments, files/Git, Scratchlist, standard dictation, usage/storage,
+attachments, `/` command suggestions, files/Git, Scratchlist, standard dictation, usage/storage,
 settings and encrypted APNs notifications. It pairs with multiple hubs and
 keeps one active. Session lists support machine filtering, pinning, rename and
 archive (active) or reopen/delete (inactive), from the row's context menu or the

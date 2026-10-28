@@ -11,7 +11,8 @@ import UniformTypeIdentifiers
 /// multiline text field grow above a fixed bottom action row. The trailing
 /// primary action is stateful: Stop while a turn runs with an empty draft,
 /// otherwise Send (long-press offers "Send & steer" during a turn). The card
-/// also hosts dictation and attachment controls.
+/// also hosts dictation and attachment controls, and a `/` command list
+/// above the card while the input is a lone slash token.
 struct ChatComposerView: View {
     @Environment(\.hapiTypography) private var typography
     let interactor: ChatInteractor
@@ -58,7 +59,14 @@ struct ChatComposerView: View {
     var body: some View {
         let composer = interactor.composer
         let attachments = interactor.attachments.items
+        let slashSuggestions = interactor.slashSuggestions
         VStack(spacing: 0) {
+            if !slashSuggestions.isEmpty {
+                SlashCommandList(commands: slashSuggestions, surface: composerSurfaceColor) { command in
+                    interactor.selectSlashCommand(command)
+                }
+                .padding(.bottom, 6)
+            }
             VStack(spacing: 0) {
                 if scratchlistMode, let store = interactor.scratchlist {
                     ScratchlistDrawerView(store: store, sessionId: interactor.sessionId, interactor: interactor,
@@ -481,6 +489,62 @@ private enum ComposerPrimaryAction {
 /// One tray chip: 36 pt thumb (image preview / MIME glyph, spinner while
 /// uploading), filename + status line, ✕ to remove. A failed chip tints red
 /// and taps to retry.
+/// Tap inserts `/name ` for arguments. Short lists size to their rows;
+/// longer ones scroll inside a bounded card.
+private struct SlashCommandList: View {
+    let commands: [SlashCommand]
+    let surface: Color
+    let onSelect: (SlashCommand) -> Void
+
+    var body: some View {
+        Group {
+            if commands.count > 4 {
+                ScrollView {
+                    rows
+                }
+                .frame(height: 220)
+            } else {
+                rows
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(surface))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+        .accessibilityIdentifier("composer.slash-commands")
+    }
+
+    private var rows: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(commands.enumerated()), id: \.element.name) { index, command in
+                if index > 0 {
+                    Divider().padding(.leading, 12)
+                }
+                Button {
+                    onSelect(command)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: "/\(command.name)")
+                            .font(.body.monospaced())
+                            .foregroundStyle(.primary)
+                        if let description = command.description, !description.isEmpty {
+                            Text(verbatim: description)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("composer.slash.\(command.name)")
+            }
+        }
+    }
+}
+
 private struct ComposerAttachmentChipView: View {
     let attachment: ComposerAttachmentUI
     let onRetry: () -> Void

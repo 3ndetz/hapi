@@ -571,6 +571,12 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
         }
         const config = payload as { permissionMode?: unknown; model?: unknown; effort?: unknown };
 
+        // The remote launcher reverts the session mode when Claude refuses one.
+        const sessionPermissionMode = currentSessionRef.current?.getPermissionMode();
+        if (sessionPermissionMode && isPermissionModeAllowedForFlavor(sessionPermissionMode, 'claude')) {
+            currentPermissionMode = sessionPermissionMode as PermissionMode;
+        }
+
         if (config.permissionMode !== undefined) {
             currentPermissionMode = resolvePermissionMode(config.permissionMode);
         }

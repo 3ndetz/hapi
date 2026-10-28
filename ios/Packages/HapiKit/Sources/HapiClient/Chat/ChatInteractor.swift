@@ -81,6 +81,9 @@ public final class ChatInteractor {
     /// One delete/reopen at a time (the Android `sessionOpPending`).
     public private(set) var sessionOpPending = false
 
+    /// Send time for the next chat send; cleared once that send dispatches.
+    public private(set) var pendingSchedule: PendingSchedule?
+
     /// Local focus intent, observed by the composer without changing its draft.
     public private(set) var composerFocusRequest = 0
     public private(set) var composerDestination: ComposerDestination = .chat
@@ -197,6 +200,53 @@ public final class ChatInteractor {
         )
     }
 
+    public func setPendingSchedule(_ schedule: PendingSchedule?) {
+        pendingSchedule = schedule
+    }
+
+    /// A scheduled send is text-only and queued (the hub rejects
+    /// attachments and steer with `scheduledAt`); the time resolves and is
+    /// validated at Send, and the schedule clears once dispatched.
+    private func sendScheduled(_ schedule: PendingSchedule) {
+        guard attachments.items.isEmpty else {
+            emit(.notice("Scheduled messages can't include attachments — remove them or send now"))
+            return
+        }
+        let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let createdAt = now()
+        let scheduledAt = schedule.resolve(now: createdAt)
+        switch PendingSchedule.validate(scheduledAt, now: createdAt) {
+        case .past:
+            emit(.notice("Scheduled time must be in the future"))
+            return
+        case .tooFar:
+            emit(.notice("Scheduled sends can be at most 7 days ahead"))
+            return
+        case nil:
+            break
+        }
+        composerText = ""
+        draftTask?.cancel()
+        draftTask = nil
+        pendingSchedule = nil
+        isSending = true
+        let localId = makeLocalId()
+        Task { [weak self] in
+            guard let self else { return }
+            self.drafts?.clear(sessionId: self.sessionId)
+            await self.performSend(
+                text: text,
+                localId: localId,
+                createdAt: createdAt,
+                deliveryMode: .queue,
+                attachments: nil,
+                scheduledAt: scheduledAt,
+                isRetry: false
+            )
+        }
+    }
+
     /// Slash-command dropdown rows: non-empty only while the composer is a
     /// lone `/token`; metadata names merged with the RPC list (RPC wins).
     public var slashSuggestions: [SlashCommand] {
@@ -246,6 +296,10 @@ public final class ChatInteractor {
         guard !isSending, !scratchlistBusy else { return }
         if composerDestination == .scratchlist {
             parkComposerDraft()
+            return
+        }
+        if let schedule = pendingSchedule {
+            sendScheduled(schedule)
             return
         }
         if attachments.hasUnsettled {

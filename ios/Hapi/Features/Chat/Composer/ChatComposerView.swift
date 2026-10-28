@@ -32,6 +32,7 @@ struct ChatComposerView: View {
     @State private var filePickerOpen = false
     @FocusState private var textFocused: Bool
     @State private var preparingAttachment = false
+    @State private var schedulePickerOpen = false
 
     private var scratchlistMode: Bool { interactor.composerDestination == .scratchlist }
     private var composerPrompt: LocalizedStringKey {
@@ -83,6 +84,13 @@ struct ChatComposerView: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 8)
                 }
+                if !scratchlistMode, let schedule = interactor.pendingSchedule {
+                    ScheduledSendChip(schedule: schedule) {
+                        interactor.setPendingSchedule(nil)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                }
                 if let dictation, case .recording(let startedAtMs) = dictation.state {
                     RecordingChipView(startedAtMs: startedAtMs) {
                         dictation.cancel()
@@ -101,6 +109,7 @@ struct ChatComposerView: View {
                 HStack(spacing: 2) {
                     addAttachmentButton
                     if interactor.scratchlist != nil { scratchlistButton }
+                    if !scratchlistMode { scheduleButton(hasAttachments: !attachments.isEmpty) }
                     Spacer()
                     if scratchlistMode, composer.canSteer {
                         Button { interactor.abortSession() } label: {
@@ -133,6 +142,11 @@ struct ChatComposerView: View {
         .animation(.snappy, value: hugsBottomEdge && !textFocused)
         .onChange(of: interactor.composerFocusRequest) {
             textFocused = true
+        }
+        .sheet(isPresented: $schedulePickerOpen) {
+            ScheduleTimeSheet { date in
+                interactor.setPendingSchedule(.at(Int(date.timeIntervalSince1970 * 1000)))
+            }
         }
         .task(id: dictation.map { ObjectIdentifier($0) }) {
             await dictation?.refreshAvailability()
@@ -247,6 +261,40 @@ struct ChatComposerView: View {
                 }
             }
         }
+    }
+
+    /// Web clock: relative presets (resolved at Send) or a specific time
+    /// within 7 days. Unavailable with attachments — the hub rejects them.
+    private func scheduleButton(hasAttachments: Bool) -> some View {
+        let active = interactor.pendingSchedule != nil
+        return Menu {
+            Section("Schedule send") {
+                ForEach(PendingSchedule.presets, id: \.self) { preset in
+                    Button(ScheduledSendChip.presetLabel(preset)) {
+                        interactor.setPendingSchedule(preset)
+                    }
+                }
+                Button("Pick a Time…", systemImage: "calendar") {
+                    schedulePickerOpen = true
+                }
+            }
+            if active {
+                Button("Don't Schedule", systemImage: "xmark") {
+                    interactor.setPendingSchedule(nil)
+                }
+            }
+        } label: {
+            actionCircle(
+                background: active ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.fill.tertiary),
+                foreground: active ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary)
+            ) {
+                Image(systemName: "clock")
+                    .font(.system(size: 15, weight: .medium))
+            }
+        }
+        .disabled(hasAttachments || interactor.scratchlistBusy)
+        .accessibilityLabel("Schedule send")
+        .accessibilityIdentifier("chat.schedule-send")
     }
 
     private var addAttachmentButton: some View {
@@ -383,12 +431,16 @@ struct ChatComposerView: View {
     private func primaryActionButton(_ composer: ComposerState, attachments: [ComposerAttachmentUI]) -> some View {
         let hasText = !composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasDraft = hasText || !attachments.isEmpty
+        let scheduled = interactor.pendingSchedule != nil
         // Attachments gate the send like the web: every chip must settle
         // Ready (uploading waits, failed must be retried or removed); a ready
         // tray allows an attachments-only send (wire: text or attachments).
+        // A scheduled send is text-only and never steers.
         let attachmentsBusy = attachments.contains { $0.status != .ready }
         let attachmentsReady = !attachments.isEmpty && !attachmentsBusy
-        let canSubmit = (hasText || attachmentsReady) && !attachmentsBusy && !composer.isSending
+        let canSubmit = scheduled
+            ? hasText && attachments.isEmpty && !composer.isSending
+            : (hasText || attachmentsReady) && !attachmentsBusy && !composer.isSending
         let action: ComposerPrimaryAction = if composer.isSending {
             .sending
         } else if composer.canSteer && !hasDraft {
@@ -427,7 +479,16 @@ struct ChatComposerView: View {
             .accessibilityLabel("Stop the current turn")
         case .send(let enabled):
             let label = sendLabel(enabled: enabled)
-            if composer.canSteer && enabled {
+            if scheduled {
+                Button {
+                    interactor.sendMessage()
+                } label: {
+                    label
+                }
+                .buttonStyle(.plain)
+                .disabled(!enabled)
+                .accessibilityLabel("Schedule send")
+            } else if composer.canSteer && enabled {
                 // Tap sends (queue); long-press opens the deliberate steer intent.
                 Menu {
                     Button("Send & steer into current turn") {
@@ -542,6 +603,90 @@ private struct SlashCommandList: View {
                 .accessibilityIdentifier("composer.slash.\(command.name)")
             }
         }
+    }
+}
+
+/// The pending send time above the input, with × to send normally again.
+private struct ScheduledSendChip: View {
+    let schedule: PendingSchedule
+    let onClear: () -> Void
+
+    static func presetLabel(_ schedule: PendingSchedule) -> String {
+        switch schedule {
+        case .delay(let minutes) where minutes % 60 == 0:
+            let hours = minutes / 60
+            return hours == 1
+                ? String(localized: "In 1 hour")
+                : String(format: String(localized: "In %lld hours"), Int64(hours))
+        case .delay(let minutes):
+            return String(format: String(localized: "In %lld minutes"), Int64(minutes))
+        case .at(let ms):
+            return Date(timeIntervalSince1970: Double(ms) / 1000)
+                .formatted(date: .abbreviated, time: .shortened)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock")
+            Text(String(format: String(localized: "Scheduled · %@"), Self.presetLabel(schedule)))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Button(action: onClear) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Don't Schedule")
+        }
+        .font(.footnote)
+        .foregroundStyle(.tint)
+        .padding(.leading, 10)
+        .background(.tint.opacity(0.1), in: Capsule())
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("chat.scheduled-send")
+    }
+}
+
+/// Specific send time: now through the hub's 7-day limit.
+private struct ScheduleTimeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onSchedule: (Date) -> Void
+    @State private var date = Date().addingTimeInterval(30 * 60)
+
+    var body: some View {
+        let now = Date()
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker(
+                        "Send at",
+                        selection: $date,
+                        in: now...now.addingTimeInterval(TimeInterval(PendingSchedule.maxDays * 24 * 60 * 60)),
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .datePickerStyle(.graphical)
+                } footer: {
+                    Text("Max 7 days. Requires the hub running; the CLI catches up the next time it connects after that time.")
+                }
+            }
+            .navigationTitle("Schedule send")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Schedule") {
+                        onSchedule(date)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
     }
 }
 

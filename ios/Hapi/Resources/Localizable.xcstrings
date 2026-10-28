@@ -2409,16 +2409,16 @@
     "Clear the filters to see every session." : {
       "extractionState" : "manual",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除筛选条件即可查看全部会话。"
-          }
-        },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Сбросьте фильтры, чтобы увидеть все сессии."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除筛选条件即可查看全部会话。"
           }
         }
       }
@@ -3698,6 +3698,23 @@
         }
       }
     },
+    "Don't Schedule" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消定时"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не откладывать"
+          }
+        }
+      }
+    },
     "Done" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4922,6 +4939,57 @@
         }
       }
     },
+    "In %lld hours" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 小时后"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Через %lld ч"
+          }
+        }
+      }
+    },
+    "In %lld minutes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分钟后"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Через %lld мин"
+          }
+        }
+      }
+    },
+    "In 1 hour" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 小时后"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Через 1 час"
+          }
+        }
+      }
+    },
     "Inactive" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5418,16 +5486,16 @@
     "Mark All as Read" : {
       "extractionState" : "manual",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部标为已读"
-          }
-        },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Отметить все как прочитанные"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部标为已读"
           }
         }
       }
@@ -5435,16 +5503,16 @@
     "Mark All as Read?" : {
       "extractionState" : "manual",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部标为已读？"
-          }
-        },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Отметить все как прочитанные?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部标为已读？"
           }
         }
       }
@@ -5452,16 +5520,16 @@
     "Mark as Read" : {
       "extractionState" : "manual",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "标为已读"
-          }
-        },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Отметить прочитанными"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标为已读"
           }
         }
       }
@@ -5469,16 +5537,33 @@
     "Marks %lld unread sessions as read on this device." : {
       "extractionState" : "manual",
       "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Непрочитанные сессии на этом устройстве будут отмечены как прочитанные: %lld."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "这会将当前设备上的 %lld 个未读会话标记为已读。"
           }
+        }
+      }
+    },
+    "Max 7 days. Requires the hub running; the CLI catches up the next time it connects after that time." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多 7 天。需 Hub 运行；CLI 下次连接时会接收消息。"
+          }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Непрочитанные сессии на этом устройстве будут отмечены как прочитанные: %lld."
+            "value" : "Максимум 7 дней. Требуется работающий хаб; CLI наверстает отправку при следующем подключении после этого времени."
           }
         }
       }
@@ -5996,16 +6081,16 @@
     "No matching sessions" : {
       "extractionState" : "manual",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有匹配的会话"
-          }
-        },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Нет подходящих сессий"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的会话"
           }
         }
       }
@@ -6856,6 +6941,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "照片图库"
+          }
+        }
+      }
+    },
+    "Pick a Time…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择时间…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выбрать время…"
           }
         }
       }
@@ -7846,19 +7948,121 @@
         }
       }
     },
-    "Search sessions" : {
+    "Schedule" : {
       "extractionState" : "manual",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "搜索会话"
+            "value" : "定时"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
+            "value" : "Запланировать"
+          }
+        }
+      }
+    },
+    "Schedule send" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отложенная отправка"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时发送"
+          }
+        }
+      }
+    },
+    "Scheduled messages can't include attachments — remove them or send now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时消息不能包含附件 — 请移除附件或立即发送"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отложенные сообщения не могут содержать вложения — удалите их или отправьте сейчас"
+          }
+        }
+      }
+    },
+    "Scheduled sends can be at most 7 days ahead" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多只能定时 7 天"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отправку можно запланировать не более чем на 7 дней вперёд"
+          }
+        }
+      }
+    },
+    "Scheduled time must be in the future" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送时间必须在未来"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Время отправки должно быть в будущем"
+          }
+        }
+      }
+    },
+    "Search sessions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Поиск сессий"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索会话"
+          }
+        }
+      }
+    },
+    "Send at" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送时间"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Время отправки"
           }
         }
       }
@@ -9889,16 +10093,16 @@
     "Unread only" : {
       "extractionState" : "manual",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅未读"
-          }
-        },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Только непрочитанные"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅未读"
           }
         }
       }

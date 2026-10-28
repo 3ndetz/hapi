@@ -184,6 +184,44 @@ public func permissionApproveBody(
     }
 }
 
+// MARK: - Scheduled send
+
+/// A send time chosen in the composer before Send (web `PendingSchedule`).
+/// Presets are relative to the moment of Send, so "in 5 minutes" never
+/// shrinks while the user is still typing.
+public enum PendingSchedule: Hashable, Sendable {
+    case delay(minutes: Int)
+    /// Absolute epoch milliseconds.
+    case at(Int)
+
+    /// Web presets `+5m`, `+30m`, `+1h`, `+4h`.
+    public static let presets: [PendingSchedule] = [
+        .delay(minutes: 5), .delay(minutes: 30), .delay(minutes: 60), .delay(minutes: 240),
+    ]
+    /// Hub `SendMessageRequestSchema` limit.
+    public static let maxDays = 7
+
+    public enum Problem: Equatable, Sendable {
+        case past
+        case tooFar
+    }
+
+    public func resolve(now: Int) -> Int {
+        switch self {
+        case .delay(let minutes): now + minutes * 60_000
+        case .at(let ms): ms
+        }
+    }
+
+    /// `validateSpecificDatetime`: 30 s grace for a minute-resolution pick
+    /// that slipped into the past while the user confirmed.
+    public static func validate(_ ms: Int, now: Int) -> Problem? {
+        if ms < now - 30_000 { return .past }
+        if ms > now + maxDays * 24 * 60 * 60_000 { return .tooFar }
+        return nil
+    }
+}
+
 // MARK: - Session config
 
 /// Load state of the per-session codex model catalog.

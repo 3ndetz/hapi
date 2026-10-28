@@ -1103,6 +1103,45 @@ struct ChatInteractorTests {
         })
     }
 
+    // MARK: Scheduled send
+
+    @Test func presetScheduleResolvesAtSendAndQueuesWithoutSteer() async throws {
+        let harness = try await ChatInteractionHarness(detail: chatDetail(thinking: true))
+        harness.interactor.setPendingSchedule(.delay(minutes: 30))
+        harness.interactor.setComposerText("ship it")
+
+        harness.interactor.sendMessage(steer: true)
+
+        #expect(await eventually {
+            await harness.performer.bodies("POST", pathSuffix: "/api/sessions/sess-1/messages") == [
+                #"{"deliveryMode":"queue","localId":"local-1","scheduledAt":1801000,"text":"ship it"}"#,
+            ]
+        })
+        #expect(harness.interactor.pendingSchedule == nil, "the schedule is consumed by the send")
+        #expect(harness.interactor.composerText.isEmpty)
+        #expect(await eventually { await harness.row(localId: "local-1")?.scheduledAt == 1_801_000 })
+    }
+
+    @Test func invalidSchedulesAndAttachmentsKeepTheDraft() async throws {
+        let harness = try await ChatInteractionHarness()
+        harness.interactor.setComposerText("later")
+
+        harness.interactor.setPendingSchedule(.at(1_000 - 31_000))
+        harness.interactor.sendMessage()
+        #expect(harness.events.contains(.notice("Scheduled time must be in the future")))
+
+        harness.interactor.setPendingSchedule(.at(1_000 + 8 * 24 * 60 * 60_000))
+        harness.interactor.sendMessage()
+        #expect(harness.events.contains(.notice("Scheduled sends can be at most 7 days ahead")))
+
+        // Within the 30 s grace a minute-resolution pick still goes out.
+        #expect(PendingSchedule.validate(1_000 - 29_000, now: 1_000) == nil)
+        #expect(harness.interactor.composerText == "later")
+        #expect(harness.interactor.pendingSchedule != nil)
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(await harness.performer.count("POST", pathSuffix: "/api/sessions/sess-1/messages") == 0)
+    }
+
     // MARK: Slash commands
 
     @Test func slashSuggestionsLoadOnceWhenEnteringSlashMode() async throws {

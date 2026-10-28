@@ -136,8 +136,10 @@ send it automatically. See [Voice input and assistant](./voice-assistant.md).
 Use the web app for the remote terminal, Work Graph, realtime dictation and
 voice assistant, session fork/rewind/export, and the skills picker. These have
 no native UI. Session history actions also depend on the agent's capabilities.
-Native apps display existing scheduled messages but do not provide a form to
-create scheduled sends. Android's full-text file export is a reader action,
+Both apps display existing scheduled messages. On iOS, the composer's clock
+schedules a text-only send up to 7 days ahead (relative presets or a specific
+time); Android has no form to create scheduled sends.
+Android's full-text file export is a reader action,
 separate from exporting an entire session.
 
 ## Multiple hubs and sign-out

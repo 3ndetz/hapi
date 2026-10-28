@@ -7,9 +7,19 @@ it('closes a stalled subscriber once pending writes reach the bound', () => {
     let closed = 0
     manager.subscribe({ id: 'slow', namespace: 'default', all: true,
         send: () => new Promise<void>(() => {}), sendHeartbeat: () => {}, close: () => { closed++ } })
-    for (let i = 0; i < 300; i++) manager.broadcast({ type: 'session-updated', sessionId: 's', namespace: 'default' })
+    for (let i = 0; i < 4200; i++) manager.broadcast({ type: 'session-updated', sessionId: 's', namespace: 'default' })
     expect(closed).toBe(1)
     expect(manager.hasSubscription('slow')).toBe(false)
+})
+
+it('also bounds stalled subscriber writes by bytes', () => {
+    const manager = new SSEManager(0, new VisibilityTracker())
+    let closed = 0
+    manager.subscribe({ id: 'slow-bytes', namespace: 'default', all: true,
+        send: () => new Promise<void>(() => {}), sendHeartbeat: () => {}, close: () => { closed++ } })
+    for (let i = 0; i < 10; i++) manager.broadcast({ type: 'session-updated', sessionId: 'x'.repeat(512 * 1024), namespace: 'default' })
+    expect(closed).toBe(1)
+    expect(manager.hasSubscription('slow-bytes')).toBe(false)
 })
 import { VisibilityTracker } from '../visibility/visibilityTracker'
 

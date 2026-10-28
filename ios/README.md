@@ -26,7 +26,8 @@ for platform differences, web-only features and everyday use.
 
 ## Requirements
 
-- Xcode 16 or newer with Swift 6 support.
+- Xcode 27.1 or newer (the app uses iOS 27.1 SDK APIs such as
+  `UIHingeInteraction`).
 - Deployment target: iOS 17.0.
 - Runtime dependencies (SPM, declared in `Packages/HapiKit/Package.swift`,
   used only by the `HapiUI` target): `swiftlang/swift-markdown` (GFM parsing
@@ -52,8 +53,8 @@ swift test --package-path ios/Packages/HapiKit
 ```
 
 CI runs package tests, the simulator build, and app-hosted transcript tests
-on `macos-15` via `.github/workflows/ios.yml` (triggered by changes under
-`ios/**` and `shared/fixtures/**`).
+on the `xcode-27` runner image via `.github/workflows/ios.yml` (triggered by
+changes under `ios/**` and `shared/fixtures/**`).
 
 ### Linux verification (no Mac needed)
 

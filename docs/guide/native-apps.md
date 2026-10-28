@@ -22,7 +22,7 @@ or Apple developer setup is needed on your hub. See [Notifications](#notificatio
 ### Build from source (developers)
 
 The app source is in the repository. Development builds follow the
-[iOS README](https://github.com/tiann/hapi/blob/main/ios/README.md) (Xcode 16
+[iOS README](https://github.com/tiann/hapi/blob/main/ios/README.md) (Xcode 27.1
 or newer, shared `Hapi` scheme; device builds require signing) or the
 [Android README](https://github.com/tiann/hapi/blob/main/android/README.md)
 (JDK 17+, Android SDK, Gradle wrapper). Self-built apps need their own push

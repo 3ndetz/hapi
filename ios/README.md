@@ -200,8 +200,12 @@ provider credentials as described below.
   (active hub first, then the roster; 404 "Session not found" / 403 = try
   the next hub) — approve/deny post `{}`, reply posts `{text, localId}`.
   Failures surface as a local notice instead of vanishing. A tap deep-links
-  to the session chat; a push for the chat currently on screen is suppressed
-  (the in-app SSE stream is already showing it).
+  to the session chat. With several paired hubs and a session the active
+  list does not know, the tap first locates the owner with
+  `GET /api/sessions/:id` (same hub order and 404/403 rules) and switches
+  to it; a miss or unreachable owner opens against the active hub. A push
+  for the chat currently on screen is suppressed (the in-app SSE stream is
+  already showing it).
 
 **Layer map**: `HapiClient/Push/` (envelope + payload + key, Linux-tested),
 `Endpoints/DeviceEndpoints.swift` (register/unregister),

@@ -171,10 +171,11 @@ FCM delivery uses an unencrypted notification data payload; direct APNs remains
 encrypted. See [Notifications](./notifications.md#native-app-notifications)
 and the [push contract](../api/native-companion-contract.md) for configuration.
 
-Push registration covers every paired hub. Notification taps currently open
-the session against the active hub; if the session cannot be found, switch to
-its owning hub. Background notification actions try paired hubs to resolve
-the session.
+Push registration covers every paired hub. On iOS, a notification tap finds
+the hub that owns the session (active hub first) and switches to it before
+opening the chat. Android opens the session against the active hub; if it
+cannot be found, switch to its owning hub. Background notification actions on
+both platforms try paired hubs to resolve the session.
 
 ## Troubleshooting
 

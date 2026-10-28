@@ -40,6 +40,8 @@ export type {
     MachineListDirectoryResponse,
     MachinePathsExistsResponse,
     AuthResponse,
+    ClaudeModelSummary,
+    ClaudeModelsResponse,
     MachinesResponse,
     MessagesResponse,
     OpencodeModelsResponse,

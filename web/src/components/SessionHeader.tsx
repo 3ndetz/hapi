@@ -3,11 +3,13 @@ import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@/types/api'
 import type { ApiClient } from '@/api/client'
 import { isTelegramApp } from '@/hooks/useTelegram'
-import { sessionModelMutationKey, useSessionActions } from '@/hooks/mutations/useSessionActions'
+import { sessionArchiveMutationKey, sessionModelMutationKey, useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { SessionExportDialog } from '@/components/SessionExportDialog'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { ArchiveSessionDialog } from '@/components/ArchiveSessionDialog'
+import { DeleteSessionDialog } from '@/components/DeleteSessionDialog'
 import { useScratchlistCount } from '@/lib/use-scratchlist-count'
 import { formatReopenError } from '@/lib/reopenError'
 import { formatReasoningLabel, getReasoningEffortForFlavor } from '@/lib/codexStatusLabels'
@@ -224,11 +226,13 @@ export function SessionHeader(props: {
     const [isSyncingCodex, setIsSyncingCodex] = useState(false)
     const [isSyncingPi, setIsSyncingPi] = useState(false)
 
-    const { archiveSession, reopenSession, renameSession, suggestSessionTitle, updateSessionSummary, setPinMode, deleteSession, isPending } = useSessionActions(
+    const { archiveSession, reopenSession, renameSession, suggestSessionTitle, updateSessionSummary, setPinMode, deleteSession, isPending: isActionPending } = useSessionActions(
         api,
         session.id,
         session.metadata?.flavor ?? null
     )
+    const isArchiving = useIsMutating({ mutationKey: sessionArchiveMutationKey(session.id), exact: true }) > 0
+    const isPending = isActionPending || isArchiving
     const [reopenError, setReopenError] = useState<string | null>(null)
 
     const handleSetPinMode = async (mode: 'none' | 'project' | 'global') => {
@@ -565,23 +569,20 @@ export function SessionHeader(props: {
                 api={api}
             />
 
-            <ConfirmDialog
+            <ArchiveSessionDialog
                 isOpen={archiveOpen}
                 onClose={() => setArchiveOpen(false)}
-                title={t('dialog.archive.title')}
-                description={t('dialog.archive.description', { name: title })}
-                confirmLabel={t('dialog.archive.confirm')}
-                confirmingLabel={t('dialog.archive.confirming')}
+                sessionId={session.id}
+                sessionName={title}
+                active={session.active}
                 onConfirm={archiveSession}
                 isPending={isPending}
-                destructive
-                centerTitle
             />
 
-            <ConfirmDialog
+            <DeleteSessionDialog
                 isOpen={deleteOpen}
+                sessionId={session.id}
                 onClose={() => setDeleteOpen(false)}
-                title={t('dialog.delete.title')}
                 description={
                     scratchlistCount > 0
                         ? `${t('dialog.delete.description', { name: title })} ${t(
@@ -592,12 +593,8 @@ export function SessionHeader(props: {
                         )}`
                         : t('dialog.delete.description', { name: title })
                 }
-                confirmLabel={t('dialog.delete.confirm')}
-                confirmingLabel={t('dialog.delete.confirming')}
                 onConfirm={handleDelete}
                 isPending={isPending}
-                destructive
-                centerTitle
             />
         </>
     )

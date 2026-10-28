@@ -115,6 +115,10 @@ struct HomeView: View {
                 set: { if let id = $0 { openSession(id) } }
             ) : nil, onOpenSession: openSession)
         }
+        .searchable(text: $listModel.searchQuery, prompt: Text("Search sessions"))
+        .onChange(of: tabletNavigation.selectedSessionId, initial: true) { _, sessionId in
+            listModel.selectedSessionId = sessionId
+        }
         .navigationTitle("Sessions")
         .navigationBarTitleDisplayMode(.inline)
         .modifier(SidebarTitleRemoval(isSidebar: showsSideBySide || isFoldedOuterScreen))

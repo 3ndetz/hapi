@@ -260,6 +260,14 @@ struct SessionListView: View {
             } description: {
                 Text("Pull to retry once you are back online.")
             }
+        } else if model.isSearching {
+            ContentUnavailableView.search(text: model.searchQuery)
+        } else if model.hasActiveFilters {
+            ContentUnavailableView {
+                Label("No matching sessions", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("Clear the filters to see every session.")
+            }
         } else {
             ContentUnavailableView {
                 Label("No sessions yet", systemImage: "tray")

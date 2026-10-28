@@ -595,9 +595,14 @@ TEST_RUNNER_HAPI_TOOL_CAPTURE=/tmp/hapi-tool-review \
 ### Home filtering
 
 Home keeps a fixed Sessions title: hub switching on the leading edge,
-Filters and New Session on the trailing edge. The native menu currently
-offers machine single-selection; only applied filters add a summary line.
-Filters are transient per home/hub and never select a new session's machine.
+Filters and New Session on the trailing edge. The native menu offers an
+**Unread Only** lens, machine single-selection (two or more machines) and
+**Mark All as Read** (local watermarks, confirmed first); only applied filters
+add a summary line. The unread lens keeps the iPad's selected chat listed.
+The search field (`.searchable`) ranks matches with the web relevance rules
+(`SessionListSearch`: title, worktree, summary, agent, machine, path and id;
+every word must match; `*`/`?` wildcards) while keeping pinned sections first.
+Filters and search are transient per home/hub and never select a new session's machine.
 Options/counts come from all session summaries, including historical machines;
 the online roster supplies names only. Missing names use a labeled short ID.
 Session-count updates do not reorder options or reset the list's scroll position.

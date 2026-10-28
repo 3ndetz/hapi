@@ -103,9 +103,10 @@ project-pinned sessions, active sessions, pending-request priority among active
 sessions, then `updatedAt` descending. Ties preserve their incoming order. The
 Web sidebar may apply additional directory grouping and client-side search
 ranking; it also exposes text, date-range and unread-only session-list filters.
-The native apps currently provide machine filtering but do not expose those
-Web-only filters. Android and iOS README files describe their platform-specific
-filter presentation and session-row differences.
+Both native apps offer machine filtering and relevance-ranked text search.
+Android adds a date range; iOS adds an unread-only lens and **Mark All as
+Read**. Android and iOS README files describe their platform-specific filter
+presentation and session-row differences.
 
 Selecting an attachment starts its upload after preparation, before you send
 the message or save the Scratchlist entry. Removing it requests cleanup of

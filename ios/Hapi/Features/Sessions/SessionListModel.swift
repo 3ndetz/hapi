@@ -87,8 +87,10 @@ struct MachineFilterUI: Identifiable, Equatable {
 /// Transient, per-home filters. Add future dimensions here, not to navigation.
 struct SessionListFilters: Equatable, Hashable {
     var machineId: String?
+    /// Web "unread only" lens: hide sessions already seen on this device.
+    var unreadOnly = false
 
-    var isActive: Bool { machineId != nil }
+    var isActive: Bool { machineId != nil || unreadOnly }
 }
 
 /// Session-list presentation state over the `HubSession` stores — the iOS
@@ -109,6 +111,10 @@ final class SessionListModel {
 
     /// Not persisted: a new home / hub starts with all sessions.
     private(set) var filters = SessionListFilters()
+    /// Text search (`.searchable`); ranks by relevance while non-blank.
+    var searchQuery = ""
+    /// The split detail's session stays listed under the unread lens.
+    var selectedSessionId: String?
     private(set) var isRefreshing = false
     /// Last refresh failed — show the offline state over snapshot data.
     private(set) var isOffline = false
@@ -192,8 +198,21 @@ final class SessionListModel {
             }
     }
 
+    /// The menu also holds the unread lens and Mark All as Read.
     var showsFilterMenu: Bool {
+        !sessionStore.sessions.isEmpty || filters.unreadOnly
+    }
+
+    var showsMachineFilter: Bool {
         machineFilterIds.count >= 2
+    }
+
+    var hasActiveFilters: Bool {
+        activeMachineFilter != nil || filters.unreadOnly
+    }
+
+    var isSearching: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Never render an invalid filter, even before the view reconciles it.
@@ -207,9 +226,36 @@ final class SessionListModel {
     }
 
     var filterSummary: String? {
-        guard let id = activeMachineFilter,
-              let machine = machineFilters.first(where: { $0.id == id }) else { return nil }
-        return String(format: String(localized: "Machine: %@"), machine.label)
+        var parts: [String] = []
+        if filters.unreadOnly {
+            parts.append(String(localized: "Unread only"))
+        }
+        if let id = activeMachineFilter,
+           let machine = machineFilters.first(where: { $0.id == id }) {
+            parts.append(String(format: String(localized: "Machine: %@"), machine.label))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    func setUnreadOnly(_ enabled: Bool) {
+        filters.unreadOnly = enabled
+    }
+
+    /// Unread sessions this device has not opened since their last update.
+    var unreadCount: Int {
+        let lastSeen = lastSeenStore.state.lastSeen
+        return sessionStore.sessions.filter {
+            LastSeenStore.isUnread($0, lastSeenAt: lastSeen[$0.id] ?? 0)
+        }.count
+    }
+
+    /// Web `markAllSessionsSeen`: local watermarks only, nothing hub-side.
+    func markAllRead() {
+        let lastSeen = lastSeenStore.state.lastSeen
+        for summary in sessionStore.sessions
+        where LastSeenStore.isUnread(summary, lastSeenAt: lastSeen[summary.id] ?? 0) {
+            lastSeenStore.markSeen(sessionId: summary.id, seenAt: summary.updatedAt)
+        }
     }
 
     func selectMachine(_ id: String?) {
@@ -228,12 +274,28 @@ final class SessionListModel {
         }
     }
 
+    /// Machine filter → unread lens → text search (relevance order, pin
+    /// sections kept so the Pinned header still applies).
     var rows: [SessionRowUI] {
         let lastSeen = lastSeenStore.state.lastSeen
         let activeFilter = activeMachineFilter
-        let visible = sessionStore.sessions.filter { summary in
+        var visible = sessionStore.sessions.filter { summary in
             guard let activeFilter else { return true }
             return (summary.metadata?.machineId ?? unknownMachineFilterId) == activeFilter
+        }
+        if filters.unreadOnly {
+            visible = visible.filter { summary in
+                summary.id == selectedSessionId
+                    || LastSeenStore.isUnread(summary, lastSeenAt: lastSeen[summary.id] ?? 0)
+            }
+        }
+        if isSearching {
+            let labels = Dictionary(uniqueKeysWithValues: machineFilters.map { ($0.id, $0.label) })
+            if let index = SessionListSearch.scoreIndex(sessions: visible, query: searchQuery, machineLabel: { id in
+                labels[id ?? unknownMachineFilterId] ?? ""
+            }) {
+                visible = SessionListSearch.rank(visible, by: index)
+            }
         }
         return visible.map { summary in
             SessionRowUI(
@@ -390,17 +452,7 @@ final class SessionListModel {
     /// `getSessionTitle` (`web/src/lib/sessionTitle.ts`): name → summary
     /// text → path tail → id prefix.
     static func sessionTitle(_ summary: SessionSummary) -> String {
-        if let name = summary.metadata?.name, !name.isEmpty {
-            return name
-        }
-        if let text = summary.metadata?.summary?.text, !text.isEmpty {
-            return text
-        }
-        if let path = summary.metadata?.path,
-           let tail = path.split(separator: "/").last(where: { !$0.isEmpty }) {
-            return String(tail)
-        }
-        return String(summary.id.prefix(8))
+        SessionListSearch.sessionTitle(summary)
     }
 }
 

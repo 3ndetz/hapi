@@ -133,6 +133,7 @@ export function createEventsRoutes(
 
                 await new Promise<void>((resolve) => {
                     const done = () => resolve()
+                    if (stream.aborted || c.req.raw.signal.aborted) { done(); return }
                     c.req.raw.signal.addEventListener('abort', done, { once: true })
                     stream.onAbort(done)
                 })

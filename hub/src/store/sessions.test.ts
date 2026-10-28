@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import type { Database } from 'bun:sqlite'
 import { Store } from './index'
 import { randomUUID } from 'node:crypto'
 import { SessionIdentityConflictError } from './sessions'
@@ -1291,5 +1292,29 @@ describe('replaceSessionTodos: watermark ratchet (PR #897 rewind race)', () => {
         expect(after?.todosUpdatedAt).toBe(51)
 
         store.close()
+    })
+})
+
+describe('updateSessionAgentState: updated_at (#1855)', () => {
+    it('only advances updated_at when a new permission request arrives', () => {
+        const store = makeStore()
+        const session = store.sessions.getOrCreateSession('agent-state-recency', { path: '/tmp/p', host: 'h' }, null, 'default')
+        const resetUpdatedAt = () => (store as unknown as { db: Database }).db
+            .prepare('UPDATE sessions SET updated_at = 1000 WHERE id = ?').run(session.id)
+        resetUpdatedAt()
+        const update = (state: unknown, version: number) =>
+            store.sessions.updateSessionAgentState(session.id, state, version, 'default')
+
+        expect(update({ codexUsage: { primary: 1 }, requests: {} }, 1).result).toBe('success')
+        expect(store.sessions.getSession(session.id)?.updatedAt).toBe(1000)
+
+        expect(update({ requests: { r1: { tool: 'Bash', arguments: {} } } }, 2).result).toBe('success')
+        const touched = store.sessions.getSession(session.id)?.updatedAt ?? 0
+        expect(touched).toBeGreaterThan(1000)
+
+        resetUpdatedAt()
+        expect(update({ requests: {}, completedRequests: { r1: { tool: 'Bash', arguments: {}, status: 'approved' } } }, 3).result).toBe('success')
+        expect(store.sessions.getSession(session.id)?.updatedAt).toBe(1000)
+        expect(update({}, 3).result).toBe('version-mismatch')
     })
 })

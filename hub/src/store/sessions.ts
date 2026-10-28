@@ -512,6 +512,8 @@ export function updateSessionAgentState(
 ): VersionedUpdateResult<unknown | null> {
     const now = Date.now()
     const normalized = agentState ?? null
+    const prior = prepareCached(db, 'SELECT agent_state FROM sessions WHERE id = ? AND namespace = ?')
+        .get(id, namespace) as { agent_state: string | null } | undefined
 
     return updateVersionedField({
         db,
@@ -524,9 +526,26 @@ export function updateSessionAgentState(
         value: normalized,
         encode: (value) => (value === null ? null : JSON.stringify(value)),
         decode: safeJsonParse,
-        setClauses: ['updated_at = @updated_at', 'seq = seq + 1'],
-        params: { updated_at: now }
+        setClauses: [
+            'updated_at = CASE WHEN @touch_updated_at = 1 THEN @updated_at ELSE updated_at END',
+            'seq = seq + 1'
+        ],
+        params: {
+            updated_at: now,
+            touch_updated_at: hasNewAgentStateRequest(safeJsonParse(prior?.agent_state ?? null), normalized) ? 1 : 0
+        }
     })
+}
+
+// Routine agent-state snapshots (usage, controlledByUser, request
+// completion) are not session activity; only a new permission request is.
+function hasNewAgentStateRequest(prior: unknown, next: unknown): boolean {
+    const nextRequests = isPlainObject(next) ? next.requests : undefined
+    if (!isPlainObject(nextRequests)) {
+        return false
+    }
+    const priorRequests = isPlainObject(prior) && isPlainObject(prior.requests) ? prior.requests : {}
+    return Object.keys(nextRequests).some((requestId) => !Object.hasOwn(priorRequests, requestId))
 }
 
 export function setSessionTodos(

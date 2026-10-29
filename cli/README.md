@@ -281,7 +281,7 @@ Data is stored in `~/.hapi/` (or `$HAPI_HOME`):
 - Cursor Agent CLI installed (`agent` on PATH) for `hapi cursor`. Install: `curl https://cursor.com/install -fsS | bash` (macOS/Linux), `irm 'https://cursor.com/install?win32=true' | iex` (Windows).
 - Grok Build CLI installed (`grok` on PATH) for `hapi grok`. Authenticate with `grok login --device-auth` on headless runner machines, or set `XAI_API_KEY`.
 - OpenCode CLI installed (`opencode` on PATH).
-- Bun 1.4.0 for building from source.
+- Bun 1.4.4 for building from source.
 
 ## Build from source
 
@@ -328,6 +328,11 @@ uses [Trusted Publishing](https://docs.npmjs.com/trusted-publishers) (OIDC), so 
 token is involved; each `@twsxtd/hapi*` package must list `tiann/hapi` /
 `release.yml` as its trusted publisher on npmjs.com. Packages already on npm are
 skipped, so a failed release can be retried by re-running the workflow.
+
+`setup-bun` reads the build version from the root `package.json`'s `packageManager`.
+Keep local release builds on that version too. Bun 1.4.0 produces invalid
+darwin-arm64 signatures that macOS 27 rejects with `SIGKILL`; Bun 1.4.4 includes
+the [upstream signing fix](https://github.com/oven-sh/bun/pull/39837).
 
 ## Related docs
 

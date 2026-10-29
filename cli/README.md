@@ -47,6 +47,28 @@ Choose a supported coding agent from your terminal and control its sessions remo
 - `hapi inspect-peer <session-id-or-prefix>` - Read-only peer metadata + recent message text (no resume). Prefer this or MCP `inspect_peer` when a user cites `[title](/sessions/<id>)` or Copy-reference `See session "…" (/sessions/<id>) for context`. `/sessions/<id>` is a hub path, not a local file. Optional `--limit`.
 - `hapi set-mode <session-id-or-prefix> <mode>` - Change the permission mode of an existing session, like the web permission picker. Active sessions switch immediately; inactive ones use it on next resume. An invalid mode prints the modes allowed for that agent.
 
+Peer messages default to `queue`: wait for the next turn, or resume an inactive
+session. Use `--delivery-mode steer` to request insertion into an active Pi,
+Codex, or Cursor ACP turn. MCP `ping_peer` accepts the same optional
+`deliveryMode: "queue" | "steer"` field.
+
+```bash
+hapi ping-peer <session-id> 'Run the next check' --delivery-mode queue
+hapi ping-peer <session-id> 'Use the corrected input path' --delivery-mode steer
+```
+
+Queue success reports `accepted` with a `ping-peer-` localId, not confirmed
+delivery. Delivery is shown in the recipient chat only after its runtime
+acknowledges consumption. Steer messages retain the same peer identity prefix.
+
+Steer rejects unsupported agents, idle targets, and inactive targets before
+sending. It reuses the queued-message Steer action: success reports `steered`,
+or `invoked` if the target consumed the message before the action arrived.
+If steering fails after the message was accepted, the error includes its
+`localId`; it may still be queued or already consumed. Inspect the target
+before retrying; do not automatically resend the prompt. Steering does not
+abort the current turn.
+
 The picker lists agents alphabetically by command name. Use Up/Down and Enter
 to choose; Esc or Ctrl-C cancels. It appears on every bare invocation, even
 when only one agent is available. No default agent or selection is saved.

@@ -72,12 +72,15 @@ describe('getHapiRunnerProcessIdentity on Windows', () => {
         spawnSyncMock.mockReturnValue({ ...completed(stdout), error: new Error('query failed') })
         expect(readWindowsProcessStartMarkers()).toBeNull()
     })
-    it('reads the generation directly from CIM without a redundant tasklist probe', async () => {
+    it('reads the generation directly without a redundant tasklist probe', async () => {
         const { getProcessStartMarker } = await import('./process')
         spawnSyncMock.mockImplementation((command: string) => command === 'powershell'
             ? completed('generation-100') : completed('hapi.exe 100 Console'))
         expect(getProcessStartMarker(100)).toBe('generation-100')
         expect(spawnSyncMock.mock.calls.filter(call => call[0] === 'tasklist')).toHaveLength(0)
+        const command = spawnSyncMock.mock.calls[0][1].at(-1)
+        expect(command.indexOf('Get-Process -Id 100')).toBeLessThan(command.indexOf('Get-CimInstance'))
+        expect(command).toContain('AddTicks(-($t.Ticks % 10))')
     })
 
     it('keeps a missing CIM generation unknown and rejects invalid PIDs without probing', async () => {

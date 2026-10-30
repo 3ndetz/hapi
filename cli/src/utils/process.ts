@@ -63,12 +63,17 @@ export function windowsProcessListCimCommand(): string {
   ].join('\n')
 }
 
-/** PowerShell -Command body for a single-PID start-marker probe. */
+/** Single-PID generation without loading WMI on the session startup path. */
 export function windowsProcessMarkerCimCommand(pid: number): string {
   const expr = WINDOWS_CIM_CREATION_DATE_MARKER_EXPR.replace(/\$_/g, '$p');
   return (
-    `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; `
-    + `if ($p -and $p.CreationDate) { ${expr} }`
+    "$ErrorActionPreference='Stop'; try { "
+    + `$t = (Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime(); `
+    // CIM exposes microseconds; GetProcessTimes exposes 100ns FILETIME ticks.
+    // Keep persisted markers and complete CIM snapshots byte-for-byte compatible.
+    + "$t.AddTicks(-($t.Ticks % 10)).ToString('o') "
+    + `} catch { $p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; `
+    + `if ($p -and $p.CreationDate) { ${expr} } }`
   );
 }
 
@@ -104,8 +109,8 @@ export function getProcessThreadGroupId(pid: number): number | null {
 export function getProcessStartMarker(pid: number): string | null {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   if (isWindows()) {
-    // CIM already answers whether this PID has a readable generation. A
-    // preceding tasklist adds a process launch without strengthening identity.
+    // Read the kernel creation time before considering CIM. Cold WMI startup in
+    // a background Windows logon can exceed the bounded synchronous probe.
     // Same UTC ISO 'o' string as orphanReap listWindowsProcessesWithCommandLine.
     // Do not print raw DateTime or use WMIC DMTF (format mismatch skips reap).
     const powershell = spawn.sync('powershell', [

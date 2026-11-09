@@ -430,7 +430,7 @@ vi.mock('@/ui/logger', () => ({
     }
 }));
 
-import { opencodeRemoteLauncher, selectAbortStatusMessage } from './opencodeRemoteLauncher';
+import { opencodeRemoteLauncher, selectAbortStatusMessage, useAcpTranscript } from './opencodeRemoteLauncher';
 
 function createMode(model?: string): OpencodeMode {
     return {
@@ -2632,6 +2632,49 @@ describe('opencodeRemoteLauncher inline model switch', () => {
         expect(addMessage).toHaveBeenCalledWith('partial settled', 'assistant');
         await launcherPromise;
         addMessage.mockRestore();
+    });
+
+    it('limits ACP transcript mode to the configured model prefix', () => {
+        const previousMode = process.env.HAPI_OPENCODE_TRANSCRIPT;
+        const previousPrefix = process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX;
+        try {
+            process.env.HAPI_OPENCODE_TRANSCRIPT = 'acp';
+            process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX = 'remote/';
+            expect(useAcpTranscript('remote/model')).toBe(true);
+            expect(useAcpTranscript('native/model')).toBe(false);
+            expect(useAcpTranscript(null)).toBe(false);
+            delete process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX;
+            expect(useAcpTranscript('native/model')).toBe(true);
+            delete process.env.HAPI_OPENCODE_TRANSCRIPT;
+            expect(useAcpTranscript('remote/model')).toBe(false);
+        } finally {
+            if (previousMode === undefined) delete process.env.HAPI_OPENCODE_TRANSCRIPT;
+            else process.env.HAPI_OPENCODE_TRANSCRIPT = previousMode;
+            if (previousPrefix === undefined) delete process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX;
+            else process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX = previousPrefix;
+        }
+    });
+
+    it('uses ACP text and reasoning instead of the native transcript when explicitly configured', async () => {
+        const previous = process.env.HAPI_OPENCODE_TRANSCRIPT;
+        process.env.HAPI_OPENCODE_TRANSCRIPT = 'acp';
+        try {
+            const { session, agentMessages } = createSessionStub([{ message: 'first', mode: createMode() }]);
+            const launcherPromise = opencodeRemoteLauncher(session as never);
+            while (!harness.events.includes('prompt:start')) await new Promise<void>(resolve => setImmediate(resolve));
+            harness.promptOnMessage!({ type: 'text', text: 'ACP answer' });
+            harness.promptOnMessage!({ type: 'reasoning', id: 'thinking-1', text: 'ACP reasoning' });
+            const event = harness.eventStreamOptions[0].onEvent!;
+            event('message.updated', { info: { id: 'answer', role: 'assistant', sessionID: 'acp-session-1' } });
+            event('message.part.updated', { part: { id: 'stream-1', messageID: 'answer', sessionID: 'acp-session-1', type: 'text', text: 'native duplicate', time: { end: 1 } } });
+            expect(agentMessages).toContainEqual({ type: 'message', message: 'ACP answer' });
+            expect(agentMessages).toContainEqual({ type: 'reasoning', id: 'thinking-1', message: 'ACP reasoning' });
+            expect(agentMessages.some((message: unknown) => JSON.stringify(message).includes('native duplicate'))).toBe(false);
+            await launcherPromise;
+        } finally {
+            if (previous === undefined) delete process.env.HAPI_OPENCODE_TRANSCRIPT;
+            else process.env.HAPI_OPENCODE_TRANSCRIPT = previous;
+        }
     });
 
     it('forwards the native question tool as AskUserQuestion with the multiSelect flag the web reads', async () => {

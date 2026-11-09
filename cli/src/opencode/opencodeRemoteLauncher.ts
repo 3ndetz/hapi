@@ -177,6 +177,13 @@ export function selectAbortStatusMessage(opts: {
     return { message: 'Turn aborted', shouldClearThinking: true };
 }
 
+/** Select ACP text for adapters whose models use an external transcript. */
+export function useAcpTranscript(model: string | null): boolean {
+    if (process.env.HAPI_OPENCODE_TRANSCRIPT !== 'acp') return false;
+    const prefix = process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX;
+    return !prefix || !!model?.startsWith(prefix);
+}
+
 class OpencodeRemoteLauncher extends RemoteLauncherBase {
     private readonly session: OpencodeSession;
     private backend: ReturnType<typeof createOpencodeBackend> | null = null;
@@ -468,7 +475,9 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             },
             onReadFailure: () => session.sendSessionEvent({ type: 'message', message: 'OpenCode native transcript is temporarily unavailable. Retrying on reconnect or at the end of the turn.' }),
             onText: (part) => {
-                if (this.majorVersion !== 'v1' || part.role !== 'assistant') return;
+                // ACP-only adapters may not persist the real agent's messages in OpenCode.
+                // Keep native summaries/events, but use exactly one source for chat text.
+                if (this.majorVersion !== 'v1' || part.role !== 'assistant' || useAcpTranscript(this.currentBackendModel)) return;
                 const converted = convertAgentMessage(part.type === 'reasoning'
                     ? { type: 'reasoning', id: part.id, text: part.text, live: !part.complete }
                     : { type: 'text', id: part.id, text: part.text, streamSnapshot: true, live: !part.complete });
@@ -2203,9 +2212,9 @@ ${messageText}`;
 
     private handleAgentMessage(rawMessage: AgentMessage): void {
         const message = presentQuestionToolCall(rawMessage);
-        // v1 ACP strips the native summary/parent metadata (and old versions
-        // strip message IDs too). The native transcript owns these text streams.
-        if (this.nativeTranscript && this.majorVersion === 'v1' && (message.type === 'text' || message.type === 'reasoning')) return;
+        // Prefer native v1 text for summary/parent metadata and message IDs.
+        // Adapters with external history can explicitly select ACP instead.
+        if (this.nativeTranscript && this.majorVersion === 'v1' && !useAcpTranscript(this.currentBackendModel) && (message.type === 'text' || message.type === 'reasoning')) return;
         const converted = convertAgentMessage(message, this.currentBackendModel);
         if (converted) {
             this.session.sendAgentMessage(converted);

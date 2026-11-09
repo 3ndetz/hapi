@@ -2424,4 +2424,3 @@ export async function opencodeRemoteLauncher(
     const launcher = new OpencodeRemoteLauncher(session, options);
     return launcher.launch();
 }
-

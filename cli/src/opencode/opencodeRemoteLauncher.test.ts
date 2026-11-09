@@ -430,7 +430,7 @@ vi.mock('@/ui/logger', () => ({
     }
 }));
 
-import { opencodeRemoteLauncher, selectAbortStatusMessage } from './opencodeRemoteLauncher';
+import { opencodeRemoteLauncher, selectAbortStatusMessage, useAcpTranscript } from './opencodeRemoteLauncher';
 
 function createMode(model?: string): OpencodeMode {
     return {
@@ -2632,6 +2632,27 @@ describe('opencodeRemoteLauncher inline model switch', () => {
         expect(addMessage).toHaveBeenCalledWith('partial settled', 'assistant');
         await launcherPromise;
         addMessage.mockRestore();
+    });
+
+    it('limits ACP transcript mode to the configured model prefix', () => {
+        const previousMode = process.env.HAPI_OPENCODE_TRANSCRIPT;
+        const previousPrefix = process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX;
+        try {
+            process.env.HAPI_OPENCODE_TRANSCRIPT = 'acp';
+            process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX = 'remote/';
+            expect(useAcpTranscript('remote/model')).toBe(true);
+            expect(useAcpTranscript('native/model')).toBe(false);
+            expect(useAcpTranscript(null)).toBe(false);
+            delete process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX;
+            expect(useAcpTranscript('native/model')).toBe(true);
+            delete process.env.HAPI_OPENCODE_TRANSCRIPT;
+            expect(useAcpTranscript('remote/model')).toBe(false);
+        } finally {
+            if (previousMode === undefined) delete process.env.HAPI_OPENCODE_TRANSCRIPT;
+            else process.env.HAPI_OPENCODE_TRANSCRIPT = previousMode;
+            if (previousPrefix === undefined) delete process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX;
+            else process.env.HAPI_OPENCODE_TRANSCRIPT_MODEL_PREFIX = previousPrefix;
+        }
     });
 
     it('uses ACP text and reasoning instead of the native transcript when explicitly configured', async () => {

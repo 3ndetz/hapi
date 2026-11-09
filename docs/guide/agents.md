@@ -387,4 +387,3 @@ the prompt is loaded by DSH through its own `skill` tool and catalog.
 
 - [How it Works](./how-it-works.md) - Architecture and data flow
 - [Quick Start](./quick-start.md) - Install HAPI and start your first session
-

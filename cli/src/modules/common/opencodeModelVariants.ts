@@ -1,5 +1,7 @@
 import { isObject } from '@hapi/protocol';
 import type { OpencodeModelVariantsResponse } from '@hapi/protocol/apiTypes';
+import { spawnSync } from 'node:child_process';
+import { killProcessTreeByPid } from '@/utils/process';
 
 export type ListOpencodeModelVariantsResponse = OpencodeModelVariantsResponse;
 
@@ -121,6 +123,13 @@ const inFlightByCwd = new Map<string | null, Promise<ListOpencodeModelVariantsRe
 
 const IDLE_REAP_MS = 10 * 60 * 1000;
 
+async function stopServe(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+    if (process.platform === 'win32' && proc.pid) {
+        try { if (await killProcessTreeByPid(proc.pid, true)) return; } catch { /* Fall back to the owned child. */ }
+    }
+    try { proc.kill(); } catch { /* The child may already have exited. */ }
+}
+
 let exitCleanupRegistered = false;
 
 /**
@@ -132,7 +141,12 @@ function registerExitCleanup(): void {
     if (exitCleanupRegistered) return;
     exitCleanupRegistered = true;
     const killResident = () => {
-        resident?.proc.kill();
+        if (resident && process.platform === 'win32' && resident.proc.pid) {
+            const result = spawnSync('taskkill.exe', ['/PID', String(resident.proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
+            if (result.status !== 0) resident.proc.kill();
+        } else {
+            resident?.proc.kill();
+        }
         resident = null;
     };
     process.on('exit', killResident);
@@ -147,7 +161,7 @@ function scheduleIdleReap(): void {
         // Only reap the serve this timer was scheduled for — a newer call may
         // have replaced the resident between scheduling and firing.
         if (resident === target && resident) {
-            resident.proc.kill();
+            void stopServe(resident.proc);
             resident = null;
         }
         idleReapTimer = null;
@@ -186,7 +200,7 @@ async function listOpencodeModelVariantsUncached(cwd: string | null): Promise<Li
     // mismatch means a different project config: kill and respawn targeted.
     if (resident) {
         if (resident.cwd !== cwd) {
-            resident.proc.kill();
+            void stopServe(resident.proc);
             resident = null;
         } else {
             const variants = await fetchVariantsFromServer(resident.port);
@@ -195,7 +209,7 @@ async function listOpencodeModelVariantsUncached(cwd: string | null): Promise<Li
                 return { success: true, variants };
             }
             // Server died (e.g. reaped externally) — fall through and respawn.
-            resident.proc.kill();
+            void stopServe(resident.proc);
             resident = null;
         }
     }
@@ -210,7 +224,7 @@ async function listOpencodeModelVariantsUncached(cwd: string | null): Promise<Li
     // on this path, but a concurrent call may have assigned it.)
     const previousResident = resident as ResidentServe | null;
     if (previousResident) {
-        previousResident.proc.kill();
+        void stopServe(previousResident.proc);
     }
     resident = { proc: spawned.proc, port: spawned.port, cwd };
     registerExitCleanup();
@@ -257,13 +271,13 @@ async function spawnServeWithCatalog(cwd: string | null): Promise<
         }
 
         if (!payload || proc.exitCode !== null) {
-            proc.kill();
+            await stopServe(proc);
             return { success: false, error: 'OpenCode provider catalog did not become available in time' };
         }
 
         return { success: true, proc, port, variants: parseOpencodeProviderVariants(payload) };
     } catch (error) {
-        proc?.kill();
+        if (proc) await stopServe(proc);
         return {
             success: false,
             error: error instanceof Error ? error.message : 'Failed to list OpenCode model variants'

@@ -211,6 +211,26 @@ describe('listOpencodeModelVariants resident lifecycle', () => {
         expect(newServe.kill).not.toHaveBeenCalled();
     });
 
+    it.skipIf(process.platform !== 'win32')('stops the Windows process tree when switching project directories', async () => {
+        const killTree = vi.fn().mockResolvedValue(true);
+        vi.resetModules();
+        vi.doMock('@/utils/process', () => ({ killProcessTreeByPid: killTree }));
+        try {
+            mod = await import('./opencodeModelVariants');
+            const first = mod.listOpencodeModelVariants({ cwd: '/a' });
+            await vi.advanceTimersByTimeAsync(300);
+            await first;
+            Object.assign(serveProcs()[0], { pid: 12345 });
+            const second = mod.listOpencodeModelVariants({ cwd: '/b' });
+            await vi.advanceTimersByTimeAsync(300);
+            await second;
+            expect(killTree).toHaveBeenCalledWith(12345, true);
+            expect(serveProcs()[0].kill).not.toHaveBeenCalled();
+        } finally {
+            vi.doUnmock('@/utils/process');
+        }
+    });
+
     it('kills an unresponsive resident before replacing it', async () => {
         const first = mod.listOpencodeModelVariants({ cwd: '/a' });
         await vi.advanceTimersByTimeAsync(300);

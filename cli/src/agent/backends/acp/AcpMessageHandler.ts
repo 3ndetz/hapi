@@ -937,6 +937,14 @@ export class AcpMessageHandler {
 
         const status = normalizeStatus(update.status);
         const existing = this.toolCalls.get(toolCallId);
+        const meta = isObject(update._meta) ? update._meta : null;
+        const pacStream = meta && isObject(meta.pacShellStream) ? meta.pacShellStream : null;
+        if (existing && status === 'in_progress' && pacStream && typeof pacStream.stdout === 'string' &&
+            pacStream.stdout.length <= 1024 * 1024 && typeof pacStream.truncated === 'boolean') {
+            this.onMessage({ type: 'tool_call', id: toolCallId, name: existing.name, input: existing.input, status,
+                progress: { output: pacStream.stdout, truncated: pacStream.truncated } });
+            return;
+        }
         const presentation = {
             ...(asString(update.title) ? { title: asString(update.title)! } : {}),
             ...(asString(update.kind) ? { kind: asString(update.kind)! } : {})

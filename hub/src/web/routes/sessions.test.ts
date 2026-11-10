@@ -66,6 +66,7 @@ function createApp(session: Session, opts?: {
     archiveSession?: (sessionId: string) => Promise<void>
     getCursorChatStoreStatus?: SyncEngine['getCursorChatStoreStatus']
     listCodexModelsForSession?: SyncEngine['listCodexModelsForSession']
+    stopPacTask?: SyncEngine['stopPacTask']
     forkConversation?: SyncEngine['forkConversation']
     clearConversation?: SyncEngine['clearConversation']
     implementCodexPlan?: SyncEngine['implementCodexPlan']
@@ -150,6 +151,7 @@ function createApp(session: Session, opts?: {
             models: []
         })),
         listOpencodeModelsForSession,
+        stopPacTask: opts?.stopPacTask,
         listOpencodeReasoningEffortOptionsForSession,
         listGrokModelsForSession,
         listGrokReasoningEffortOptionsForSession,
@@ -1206,6 +1208,36 @@ describe('sessions routes', () => {
         const response = await app.request('/api/sessions/session-1/cursor-models')
 
         expect(response.status).toBe(400)
+    })
+
+    it('routes PAC task stops only to an accessible active OpenCode session', async () => {
+        const calls: Array<[string, string]> = []
+        const session = createSession({ metadata: { path: '/tmp/project', host: 'localhost', flavor: 'opencode' } })
+        const { app } = createApp(session, { stopPacTask: async (sessionId, taskId) => {
+            calls.push([sessionId, taskId])
+            return { status: 'stop_requested' }
+        } })
+        const response = await app.request('/api/sessions/session-1/pac-tasks/stop', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'pac:child' })
+        })
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ result: { status: 'stop_requested' } })
+        expect(calls).toEqual([['session-1', 'pac:child']])
+        const invalid = await app.request('/api/sessions/session-1/pac-tasks/stop', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: '' })
+        })
+        expect(invalid.status).toBe(400)
+        expect(calls).toHaveLength(1)
+    })
+
+    it('rejects PAC task stops for other harnesses and inaccessible sessions', async () => {
+        const invoke = (app: Hono<WebAppEnv>) => app.request('/api/sessions/session-1/pac-tasks/stop', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'pac:child' })
+        })
+        expect((await invoke(createApp(createSession()).app)).status).toBe(400)
+        const open = createSession({ metadata: { path: '/tmp/project', host: 'localhost', flavor: 'opencode' } })
+        expect((await invoke(createApp(open, { sessionExists: false }).app)).status).toBe(404)
+        expect((await invoke(createApp({ ...open, active: false }).app)).status).toBe(409)
     })
 
     it('rejects opencode-models for non-OpenCode sessions', async () => {

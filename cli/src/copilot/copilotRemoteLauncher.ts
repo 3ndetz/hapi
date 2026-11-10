@@ -272,6 +272,8 @@ export class CopilotRemoteLauncher extends RemoteLauncherBase {
             case 'generated_image':
                 this.messageBuffer.addMessage(`Generated image: ${message.fileName}`, 'assistant');
                 break;
+            case 'background_tasks':
+                break;
             case 'turn_complete':
                 this.messageBuffer.addMessage('Turn complete', 'status');
                 break;

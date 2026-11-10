@@ -1,4 +1,4 @@
-import { isObject } from '@hapi/protocol'
+import { AGENT_MESSAGE_PAYLOAD_TYPE, isObject } from '@hapi/protocol'
 import { unwrapRoleWrappedRecordEnvelope } from '@hapi/protocol/messages'
 import type { BackgroundTask } from '@hapi/protocol/types'
 
@@ -14,7 +14,7 @@ import type { BackgroundTask } from '@hapi/protocol/types'
 export function extractBackgroundTasks(messageContent: unknown): BackgroundTask[] | null {
     const record = unwrapRoleWrappedRecordEnvelope(messageContent)
     if (!record || record.role !== 'agent') return null
-    if (!isObject(record.content) || record.content.type !== 'output') return null
+    if (!isObject(record.content) || (record.content.type !== 'output' && record.content.type !== AGENT_MESSAGE_PAYLOAD_TYPE)) return null
 
     const data = isObject(record.content.data) ? record.content.data : null
     if (data?.type !== 'system' || data.subtype !== 'background_tasks_changed') return null

@@ -441,6 +441,42 @@ describe('reduceChatBlocks', () => {
         expect(block?.kind === 'tool-call' ? block.tool.permission?.status : null).toBe('pending')
     })
 
+    it('preserves a pending PAC interactive question when no matching tool call is visible', () => {
+        const messages = [userMessage('u1', 'hello', 1_700_000_000_000)]
+        const questions = [{ question: 'Choose?', header: 'Choice', multiSelect: true, options: [
+            { label: 'Red', description: 'Red option' }, { label: 'Blue', description: 'Blue option' }
+        ] }]
+        const agentState = { requests: { 'pac-question-test': { tool: 'AskUserQuestion', arguments: { questions }, createdAt: 1_700_000_000_500 } }, completedRequests: {} } as unknown as AgentState
+        const block = reduceChatBlocks(messages, agentState).blocks.find(entry => entry.kind === 'tool-call' && entry.id === 'pac-question-test')
+        expect(block?.kind === 'tool-call' ? block.tool.input : null).toEqual({ questions })
+        expect(block?.kind === 'tool-call' ? block.tool.permission?.status : null).toBe('pending')
+    })
+
+    it('associates completed PAC answers with the originating tool card', () => {
+        const questions = [{ question: 'Choose?', header: 'Choice', multiSelect: true, options: [
+            { label: 'Red', description: 'Red option' }, { label: 'Blue', description: 'Blue option' }
+        ] }]
+        const messages: NormalizedMessage[] = [{ id: 'agent-tool', localId: null, createdAt: 1_700_000_000_100, role: 'agent', isSidechain: false,
+            content: [{ type: 'tool-call', id: 'toolu-pac', name: 'AskUserQuestion', input: { questions }, description: null, uuid: 'tool-uuid', parentUUID: null }] }]
+        const agentState = { requests: {}, completedRequests: { 'toolu-pac': { tool: 'AskUserQuestion', arguments: { questions },
+            status: 'approved', answers: { '0': ['Red', 'Blue'] }, createdAt: 1_700_000_000_100, completedAt: 1_700_000_000_200 } } } as unknown as AgentState
+        const block = reduceChatBlocks(messages, agentState).blocks.find(entry => entry.kind === 'tool-call' && entry.id === 'toolu-pac')
+        expect(block?.kind === 'tool-call' ? block.tool.permission?.answers : null).toEqual({ '0': ['Red', 'Blue'] })
+    })
+
+    it('keeps PAC shell output visible on a running tool card', () => {
+        const messages: NormalizedMessage[] = [
+            { id: 'start', localId: null, createdAt: 1_700_000_000_100, role: 'agent', isSidechain: false,
+                content: [{ type: 'tool-call', id: 'toolu-shell', name: 'Bash', input: { command: 'example' }, description: null, uuid: 'tool-start', parentUUID: null }] },
+            { id: 'progress', localId: null, createdAt: 1_700_000_000_200, role: 'agent', isSidechain: false,
+                content: [{ type: 'tool-call', id: 'toolu-shell', name: 'Bash', input: { command: 'example' }, description: null, uuid: 'tool-progress', parentUUID: null,
+                    progress: { output: 'first\n', truncated: false } }] }
+        ]
+        const block = reduceChatBlocks(messages, null).blocks.find(entry => entry.kind === 'tool-call' && entry.id === 'toolu-shell')
+        expect(block?.kind === 'tool-call' ? block.tool.result : null).toEqual({ output: 'first\n', truncated: false })
+        expect(block?.kind === 'tool-call' ? block.tool.state : null).toBe('running')
+    })
+
     it('synthesizes a card for a pending permission whose sidechain tool_use was dropped by the tracer', () => {
         // Regression (hapi#1073): background subagents arrive with no
         // parentToolUseId and no prompt-holding sidechain root, so the tracer

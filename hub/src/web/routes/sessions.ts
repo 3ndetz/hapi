@@ -348,6 +348,24 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
         return c.json({ ok: true })
     })
 
+    app.post('/sessions/:id/pac-tasks/stop', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) return engine
+        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        if (sessionResult instanceof Response) return sessionResult
+        if (sessionResult.session.metadata?.flavor !== 'opencode') return c.json({ error: 'PAC task control requires an OpenCode session' }, 400)
+        let body: unknown
+        try { body = await c.req.json() } catch { return c.json({ error: 'Invalid JSON body' }, 400) }
+        if (!body || typeof body !== 'object' || !('taskId' in body) || typeof body.taskId !== 'string' || !body.taskId || body.taskId.length > 512) {
+            return c.json({ error: 'Invalid PAC task identity' }, 400)
+        }
+        try {
+            return c.json({ result: await engine.stopPacTask(sessionResult.sessionId, body.taskId) })
+        } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : 'PAC task stop failed' }, 500)
+        }
+    })
+
     app.post('/sessions/:id/fork', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) {

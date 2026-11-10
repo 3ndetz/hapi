@@ -11,6 +11,7 @@ import packageJson from '../../../../package.json';
 
 type PendingPermission = {
     resolve: (result: { outcome: { outcome: string; optionId?: string } }) => void;
+    pacQuestion?: boolean;
 };
 
 type AcpPromptUsage = {
@@ -91,6 +92,7 @@ type AcpInitializeResult = {
 export class AcpSdkBackend implements AgentBackend {
     private transport: AcpStdioTransport | null = null;
     private permissionHandler: ((request: PermissionRequest) => void) | null = null;
+    private permissionCancelledHandler: ((id: string) => void) | null = null;
     private stderrErrorHandler: ((error: AcpStderrError) => void) | null = null;
     private readonly pendingPermissions = new Map<string, PendingPermission>();
     private readonly sessionModelsMetadata = new Map<string, AcpSessionModelsMetadata>();
@@ -868,12 +870,17 @@ export class AcpSdkBackend implements AgentBackend {
             outcome: {
                 outcome: 'selected',
                 optionId: response.optionId
-            }
+            },
+            ...(request.pacQuestion && response.pacAnswers ? { _meta: { pac: { answers: response.pacAnswers } } } : {})
         });
     }
 
     onPermissionRequest(handler: (request: PermissionRequest) => void): void {
         this.permissionHandler = handler;
+    }
+
+    onPermissionCancelled(handler: (id: string) => void): void {
+        this.permissionCancelledHandler = handler;
     }
 
     onStderrError(handler: (error: AcpStderrError) => void): void {
@@ -1016,6 +1023,12 @@ export class AcpSdkBackend implements AgentBackend {
             this.handleSessionUpdate(params);
         } else if (method === OPENCODE_CHILD_UPDATE_METHOD && this.options.childSessionUpdates) {
             this.handleChildSessionUpdate(params);
+        } else if (method === 'pac/background_tasks_changed' && this.options.childSessionUpdates) {
+            this.handlePacBackgroundTasks(params);
+        } else if (method === 'pac/permission/cancelled' && this.options.childSessionUpdates && isObject(params) &&
+            params.sessionId === this.activeSessionId && typeof params.toolCallId === 'string' &&
+            (/^pac-(terminal|file)-[0-9a-f-]{36}$/.test(params.toolCallId) || this.pendingPermissions.get(params.toolCallId)?.pacQuestion === true)) {
+            this.permissionCancelledHandler?.(params.toolCallId);
         } else if (
             method === '_x.ai/settings/update'
             && isObject(params)
@@ -1023,6 +1036,19 @@ export class AcpSdkBackend implements AgentBackend {
         ) {
             this.autoPermissionModeEnabled = params.auto_permission_mode_enabled === true;
         }
+    }
+
+    private handlePacBackgroundTasks(params: unknown): void {
+        if (!isObject(params) || typeof params.rootSessionId !== 'string' || params.rootSessionId !== this.activeSessionId || !Array.isArray(params.tasks) || params.tasks.length > 256) return;
+        const tasks = params.tasks.flatMap((task) => {
+            if (!isObject(task) || typeof task.task_id !== 'string' || !task.task_id || typeof task.task_type !== 'string' || typeof task.description !== 'string') return [];
+            return [{ task_id: task.task_id, task_type: task.task_type, description: task.description }];
+        });
+        if (tasks.length !== params.tasks.length) return;
+        const sessionId = params.rootSessionId;
+        this.sessionUpdateQueue = this.sessionUpdateQueue.then(() => {
+            if (this.activeSessionId === sessionId) this.childEmitSink?.({ type: 'background_tasks', tasks });
+        });
     }
 
     /**
@@ -1374,11 +1400,12 @@ export class AcpSdkBackend implements AgentBackend {
             kind,
             rawInput,
             rawOutput,
-            options
+            options,
+            ...(isObject(params._meta) && isObject(params._meta.pac) && params._meta.pac.question === true ? { pacQuestion: true } : {})
         };
 
         const responsePromise = new Promise((resolve) => {
-            this.pendingPermissions.set(toolCallId, { resolve });
+            this.pendingPermissions.set(toolCallId, { resolve, ...(request.pacQuestion ? { pacQuestion: true } : {}) });
         });
 
         if (this.permissionHandler) {

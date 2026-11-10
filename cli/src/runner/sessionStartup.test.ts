@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanupFailedStartupAfterExit, sessionStartupTimeout, waitForRecoverableStartup } from './sessionStartup';
+import { cleanupFailedStartupAfterExit, isRecoverableStartup, sessionStartupTimeout, waitForRecoverableStartup } from './sessionStartup';
 import { EventEmitter } from 'node:events';
 import { createSpawnDeduplicator } from './run';
 
@@ -90,6 +90,12 @@ describe('recoverable Codex startup', () => {
     });
 });
 describe('startup deadlines', () => {
+    it('preserves unconfirmed PAC startup without changing ordinary OpenCode behavior', () => {
+        expect(isRecoverableStartup('opencode', 'PAC_host/sonnet')).toBe(true);
+        expect(isRecoverableStartup('opencode', 'other/model')).toBe(false);
+        expect(isRecoverableStartup('opencode')).toBe(false);
+        expect(isRecoverableStartup('codex')).toBe(true);
+    });
     it('deduplicates a reserved fresh row against a concurrent existing-row retry', async () => {
         let complete!: (value: { type: 'success'; sessionId: string }) => void;
         const spawn = vi.fn(() => new Promise<{ type: 'success'; sessionId: string }>(resolve => { complete = resolve; }));
@@ -103,6 +109,8 @@ describe('startup deadlines', () => {
     it('gives fresh and resumed Codex the same 30 second budget and other agents 15 seconds', () => {
         expect(sessionStartupTimeout('codex')).toBe(30_000);
         expect(sessionStartupTimeout('claude')).toBe(15_000);
+        expect(sessionStartupTimeout('opencode', undefined, 'PAC_host/sonnet')).toBe(60_000);
+        expect(sessionStartupTimeout('opencode', undefined, 'ordinary/model')).toBe(15_000);
         expect(sessionStartupTimeout(undefined)).toBe(15_000);
     });
     it.each(['', 'bad', '0', '-1', 'Infinity'])('ignores invalid override %s', value => {
@@ -111,5 +119,6 @@ describe('startup deadlines', () => {
     it('honors a positive configured deadline for either agent', () => {
         expect(sessionStartupTimeout('codex', '1234')).toBe(1234);
         expect(sessionStartupTimeout('claude', '1234')).toBe(1234);
+        expect(sessionStartupTimeout('opencode', '1234', 'PAC_host/sonnet')).toBe(1234);
     });
 });

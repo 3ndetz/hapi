@@ -43,6 +43,7 @@ export const RPC_METHODS = {
     ListPiModels: 'listPiModels',
     ListPiSessions: 'listPiSessions',
     ListOpencodeModels: 'listOpencodeModels',
+    StopPacTask: 'stopPacTask',
     ListOpencodeModelVariants: 'listOpencodeModelVariants',
     ListOpencodeSessions: 'listOpencodeSessions',
     ListOpencodeModelsForCwd: 'listOpencodeModelsForCwd',

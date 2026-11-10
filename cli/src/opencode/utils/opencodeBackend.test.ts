@@ -183,6 +183,16 @@ describe('createOpencodeBackend', () => {
         expect(calls[1]?.childSessionUpdates).toBeUndefined();
     });
 
+    it('enables child session updates for the experimental PAC v1 adapter', () => {
+        vi.stubEnv('PAC_EXPERIMENTAL', '1');
+        try {
+            createOpencodeBackend({ cwd: '/tmp/x', majorVersion: 'v1' });
+            expect(constructorCalls[0]).toMatchObject({ childSessionUpdates: true });
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+
     it('v2: defaults spawnCwd to the invoked cwd when opts.cwd is absent', () => {
         createOpencodeBackend({ majorVersion: 'v2' });
         const call = constructorCalls[0] as unknown as { spawnCwd?: string };

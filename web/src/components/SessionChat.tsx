@@ -94,6 +94,7 @@ import { CursorMigrationBanner } from '@/components/CursorMigrationBanner'
 import { TeamPanel } from '@/components/TeamPanel'
 import { SessionStatusPanel } from '@/components/SessionStatusPanel'
 import { buildSessionStatusData } from '@/chat/sessionStatus'
+import { PacTaskControls } from '@/components/PacTaskControls'
 import { usePlatform } from '@/hooks/usePlatform'
 import { getToolCardDisplayPresentation, useToolCardDisplayMode } from '@/hooks/useToolCardDisplayMode'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
@@ -2020,6 +2021,9 @@ function SessionChatInner(props: SessionChatProps) {
             <CursorMigrationBanner metadata={props.session.metadata} />
 
             {sessionStatus ? <SessionStatusPanel data={sessionStatus} /> : null}
+            {agentFlavor === 'opencode' && props.session.active && props.session.model?.startsWith('PAC_') ? (
+                <PacTaskControls tasks={props.session.backgroundTasks ?? []} onStop={(taskId) => props.api.stopPacTask(props.session.id, taskId)} />
+            ) : null}
 
             <div className="flex flex-col min-h-0 flex-1">
             {props.session.teamState && (

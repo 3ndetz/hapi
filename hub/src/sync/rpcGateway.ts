@@ -55,6 +55,8 @@ import type { RpcRegistry } from '../socket/rpcRegistry'
 
 const DEFAULT_RPC_TIMEOUT_MS = 30_000
 const MODEL_LIST_RPC_TIMEOUT_MS = 120_000
+const STOP_SESSION_RPC_TIMEOUT_MS = 90_000
+const PAC_SPAWN_RPC_TIMEOUT_MS = 90_000
 // Codex can spend 30s awaiting startup after preflight and process creation.
 const CODEX_SPAWN_RPC_TIMEOUT_MS = 60_000
 
@@ -220,7 +222,7 @@ export class RpcGateway {
         const result = await this.machineRpc(machineId, RPC_METHODS.StopSession, {
             sessionId,
             ...(opts?.processStartMarker ? { processStartMarker: opts.processStartMarker } : {}),
-        })
+        }, STOP_SESSION_RPC_TIMEOUT_MS)
         const status = result && typeof result === 'object' ? (result as { status?: unknown }).status : undefined
         if (status === 'stopped' || status === 'already_gone' || status === 'still_alive' || status === 'unknown') return status
         throw new Error('Unexpected stop-session response')
@@ -291,7 +293,8 @@ export class RpcGateway {
                     startingMode,
                     forkSession: forkSession === true
                 },
-                agent === 'codex' ? CODEX_SPAWN_RPC_TIMEOUT_MS : DEFAULT_RPC_TIMEOUT_MS
+                agent === 'codex' ? CODEX_SPAWN_RPC_TIMEOUT_MS :
+                    agent === 'opencode' && model?.startsWith('PAC_') ? PAC_SPAWN_RPC_TIMEOUT_MS : DEFAULT_RPC_TIMEOUT_MS
             )
             if (result && typeof result === 'object') {
                 const obj = result as Record<string, unknown>
@@ -529,6 +532,10 @@ export class RpcGateway {
 
     async listOpencodeModelsForSession(sessionId: string): Promise<RpcListOpencodeModelsResponse> {
         return await this.sessionRpc(sessionId, RPC_METHODS.ListOpencodeModels, {}) as RpcListOpencodeModelsResponse
+    }
+
+    async stopPacTask(sessionId: string, taskId: string): Promise<unknown> {
+        return await this.sessionRpc(sessionId, RPC_METHODS.StopPacTask, { taskId })
     }
 
     async listOpencodeModelsForCwd(machineId: string, cwd: string): Promise<RpcListOpencodeModelsResponse> {

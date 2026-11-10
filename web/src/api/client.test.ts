@@ -12,6 +12,16 @@ describe('ApiClient error mapping', () => {
         globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch
     })
 
+    it('sends PAC task stops to the owning session and rejects unconfirmed outcomes', async () => {
+        fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ result: { status: 'stop_requested' } }), { status: 200 }))
+        fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ result: { status: 'failed' } }), { status: 200 }))
+        const api = new ApiClient('test-token')
+        await api.stopPacTask('session-1', 'pac:child')
+        expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/sessions/session-1/pac-tasks/stop')
+        expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ taskId: 'pac:child' })
+        await expect(api.stopPacTask('session-1', 'pac:child')).rejects.toThrow('not accepted')
+    })
+
     it('passes an optional maxBytes bound to session file reads', async () => {
         fetchMock.mockResolvedValueOnce(
             new Response(JSON.stringify({ success: true, content: '' }), { status: 200 })

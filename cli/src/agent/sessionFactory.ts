@@ -7,6 +7,7 @@ import { ApiClient } from '@/api/api'
 import type { ApiSessionClient } from '@/api/apiSession'
 import type { AgentState, MachineMetadata, Metadata, Session } from '@/api/types'
 import { getInstalledCliMtimeMs, notifyRunnerSessionStarted } from '@/runner/controlClient'
+import { notifySessionStartedWithRetry, shouldRetryPacStartupNotification } from '@/runner/notifySessionStarted'
 import { readSettings } from '@/persistence'
 import { configuration } from '@/configuration'
 import { logger } from '@/ui/logger'
@@ -223,7 +224,8 @@ async function getMachineIdOrExit(): Promise<string> {
 async function reportSessionStarted(sessionId: string, metadata: Metadata): Promise<void> {
     try {
         logger.debug(`[START] Reporting session ${sessionId} to runner`)
-        const result = await notifyRunnerSessionStarted(sessionId, metadata)
+        const retry = shouldRetryPacStartupNotification(metadata.startedBy, metadata.flavor, process.env.PAC_EXPERIMENTAL)
+        const result = await notifySessionStartedWithRetry(() => notifyRunnerSessionStarted(sessionId, metadata), retry ? 5 : 1)
         if (result?.error) {
             logger.debug(`[START] Failed to report to runner (may not be running):`, result.error)
         } else {

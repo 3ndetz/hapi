@@ -17,7 +17,7 @@ import { getCliArgs } from '@/utils/cliArgs';
 import { getProcessStartMarker, getSystemBootId, getProcessThreadGroupId, normalizeBootId, isProcessAlive, isWindows, killProcess, killProcessByChildProcess, killProcessTreeByPid } from '@/utils/process';
 import { findStopSessionOrphanTargets, listWindowsProcessesWithCommandLine, reapRunnerSpawnedOrphans } from '@/runner/orphanReap';
 import { decideUntrackedRunnerWebhook } from '@/runner/lateRunnerWebhook';
-import { cleanupFailedStartupAfterExit, sessionStartupTimeout, waitForRecoverableStartup } from './sessionStartup';
+import { cleanupFailedStartupAfterExit, isRecoverableStartup, sessionStartupTimeout, waitForRecoverableStartup } from './sessionStartup';
 import {
     decideKeepWrapperArchive,
     decideRawPidStop,
@@ -905,7 +905,7 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
         }
         invalidateVerifiedExit(`PID-${pid}`);
         logger.debug(`[RUNNER RUN] Spawned process with PID ${pid}`);
-        const webhookTimeoutMs = sessionStartupTimeout(options.agent, process.env.HAPI_RUNNER_WEBHOOK_TIMEOUT_MS);
+        const webhookTimeoutMs = sessionStartupTimeout(options.agent, process.env.HAPI_RUNNER_WEBHOOK_TIMEOUT_MS, options.model);
         let observedExitCode: number | null = null;
         let observedExitSignal: NodeJS.Signals | null = null;
         const buildWebhookFailureMessage = (reason: 'timeout' | 'exit-before-webhook' | 'process-error-before-webhook'): string => {
@@ -996,9 +996,9 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
         // Wait for webhook to populate session with happySessionId
         logger.debug(`[RUNNER RUN] Waiting for session webhook for PID ${pid}`);
 
-        const recoverableStartup = options.agent === 'codex' ? waitForRecoverableStartup<TrackedSession>({
+        const recoverableStartup = isRecoverableStartup(options.agent, options.model) ? waitForRecoverableStartup<TrackedSession>({
           timeoutMs: webhookTimeoutMs,
-          timeoutMessage: `Codex startup is still unconfirmed for PID ${pid}; the process remains tracked. Wait for the existing session instead of creating another, or stop it explicitly.`,
+          timeoutMessage: `${options.agent === 'codex' ? 'Codex' : 'PAC-backed OpenCode'} startup is still unconfirmed for PID ${pid}; the process remains tracked. Wait for the existing session instead of creating another, or stop it explicitly.`,
           sessionId: session => session.happySessionId!,
           onLateReady: session => {
             if (trackHubId) spawnSession.recoverChild(trackHubId, { type: 'success', sessionId: session.happySessionId! });
@@ -1007,11 +1007,6 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
           },
           onLateFailure: message => {
             reportSpawnOutcomeToHub?.({ type: 'error', details: { message, pid } });
-            if (worktreeInfo && happyProcess) cleanupFailedStartupAfterExit(
-              happyProcess,
-              () => !trackedSession.happySessionId,
-              () => { void cleanupWorktree().catch(error => logger.debug('[RUNNER RUN] Late startup worktree cleanup failed', error)); },
-            );
           },
         }) : null;
         if (recoverableStartup) {
@@ -1124,7 +1119,12 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
               signal: observedExitSignal
             }
           });
-          await maybeCleanupWorktree('spawn-error');
+          if (recoverableStartup && worktreeInfo && happyProcess) {
+            cleanupFailedStartupAfterExit(happyProcess, () => !trackedSession.happySessionId,
+              () => { void cleanupWorktree().catch(error => logger.debug('[RUNNER RUN] Startup worktree cleanup failed', error)); });
+          } else {
+            await maybeCleanupWorktree('spawn-error');
+          }
         } else {
           reportSpawnOutcomeToHub?.({ type: 'success' });
         }

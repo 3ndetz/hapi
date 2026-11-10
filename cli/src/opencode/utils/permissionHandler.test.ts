@@ -21,6 +21,7 @@ function createHarness(getPermissionMode: () => 'default' | 'plan' | 'yolo' = ()
     };
     const rpcHandlers = new Map<string, (params: unknown) => Promise<unknown> | unknown>();
     let permissionHandler: ((request: PermissionRequest) => void) | null = null;
+    let permissionCancelled: ((id: string) => void) | null = null;
     const respondCalls: Array<{
         sessionId: string;
         request: PermissionRequest;
@@ -51,6 +52,9 @@ function createHarness(getPermissionMode: () => 'default' | 'plan' | 'yolo' = ()
         onPermissionRequest(handler) {
             permissionHandler = handler;
         },
+        onPermissionCancelled(handler) {
+            permissionCancelled = handler;
+        },
         async disconnect() {}
     };
 
@@ -65,6 +69,10 @@ function createHarness(getPermissionMode: () => 'default' | 'plan' | 'yolo' = ()
                 throw new Error('Permission handler was not registered');
             }
             permissionHandler(request);
+        },
+        emitPermissionCancelled(id: string) {
+            if (!permissionCancelled) throw new Error('Permission cancellation handler was not registered');
+            permissionCancelled(id);
         }
     };
 }
@@ -178,5 +186,48 @@ describe('OpencodePermissionHandler plan mode', () => {
                 decision: 'approved'
             }
         });
+    });
+});
+
+describe('PAC interactive questions', () => {
+    it.each(['yolo', 'plan'] as const)('asks the user in %s mode and preserves answers', async (mode) => {
+        const harness = createHarness(() => mode);
+        harness.emitPermissionRequest(buildRequest({ title: 'AskUserQuestion', pacQuestion: true, rawInput: { questions: [{ question: 'Pick?' }] } }));
+        await flushAsyncWork();
+        expect(harness.respondCalls).toEqual([]);
+        expect(harness.getAgentState().requests).toHaveProperty('perm-1');
+        await harness.rpcHandlers.get('permission')!({ id: 'perm-1', approved: true, answers: { '0': ['one', 'two'] } });
+        expect(harness.respondCalls[0].response).toEqual({ outcome: 'selected', optionId: 'allow-once', pacAnswers: { '0': ['one', 'two'] } });
+        expect(harness.getAgentState().completedRequests).toMatchObject({ 'perm-1': { answers: { '0': ['one', 'two'] } } });
+    });
+
+    it('cancels an approval with no answers', async () => {
+        const harness = createHarness();
+        harness.emitPermissionRequest(buildRequest({ title: 'AskUserQuestion', pacQuestion: true }));
+        await harness.rpcHandlers.get('permission')!({ id: 'perm-1', approved: true });
+        expect(harness.respondCalls[0].response).toEqual({ outcome: 'cancelled' });
+        expect(harness.getAgentState().completedRequests).toMatchObject({ 'perm-1': { status: 'canceled' } });
+    });
+
+    it('propagates rejection without submitting an answer', async () => {
+        const harness = createHarness(() => 'yolo');
+        harness.emitPermissionRequest(buildRequest({ title: 'AskUserQuestion', pacQuestion: true }));
+        await harness.rpcHandlers.get('permission')!({ id: 'perm-1', approved: false, decision: 'denied' });
+        expect(harness.respondCalls[0].response).toEqual({ outcome: 'selected', optionId: 'reject-once' });
+        expect(harness.getAgentState().completedRequests).toMatchObject({ 'perm-1': { status: 'denied' } });
+    });
+});
+
+describe('PAC source permission cancellation', () => {
+    it('cancels only the matching pending request', async () => {
+        const harness = createHarness();
+        harness.emitPermissionRequest(buildRequest({ id: 'first', toolCallId: 'first' }));
+        harness.emitPermissionRequest(buildRequest({ id: 'second', toolCallId: 'second' }));
+        harness.emitPermissionCancelled('first');
+        await flushAsyncWork();
+        expect(harness.respondCalls).toEqual([{ sessionId: 'session-1', request: expect.objectContaining({ id: 'first' }), response: { outcome: 'cancelled' } }]);
+        expect(harness.getAgentState().requests).not.toHaveProperty('first');
+        expect(harness.getAgentState().requests).toHaveProperty('second');
+        expect(harness.getAgentState().completedRequests).toMatchObject({ first: { status: 'canceled', decision: 'abort' } });
     });
 });

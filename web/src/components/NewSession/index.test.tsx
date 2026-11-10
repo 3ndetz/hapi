@@ -259,6 +259,7 @@ vi.mock('./OpencodeModelSelector', () => ({
         <>
             <button type="button" data-testid="opencode-model-default" onClick={() => props.onModelChange(null)}>default</button>
             <button type="button" data-testid="opencode-model-pick" onClick={() => props.onModelChange('provider/model')}>pick</button>
+            <button type="button" data-testid="opencode-model-pac" onClick={() => props.onModelChange('PAC_controller/sonnet')}>pac</button>
             <div data-testid="opencode-model">{props.selectedModel ?? 'default'}</div>
         </>
     )
@@ -1057,6 +1058,18 @@ describe('NewSession launch preferences', () => {
         // Spawn omits model and the explicit Default choice sticks.
         expect(mocks.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ agent: 'opencode', model: undefined }))
         expect(screen.getByTestId('opencode-model')).toHaveTextContent('default')
+    })
+
+    it('passes the selected named PAC model to the HAPI session launch', async () => {
+        savePreferredAgent('opencode')
+        mocks.opencodeModels = [{ modelId: 'PAC_controller/sonnet', name: 'PAC controller Sonnet' }]
+        mocks.spawnSession.mockResolvedValue({ type: 'success', sessionId: 'pac-session' })
+        render(<NewSession api={api} machines={[machine]} initialMachineId="machine-1" initialDirectory="C:\repo" onSuccess={mocks.onSuccess} onCancel={() => {}} />)
+        fireEvent.click(screen.getByTestId('opencode-model-pac'))
+        await waitFor(() => expect(screen.getByTestId('create')).toBeEnabled())
+        fireEvent.click(screen.getByTestId('create'))
+        await waitFor(() => expect(mocks.onSuccess).toHaveBeenCalledWith('pac-session'))
+        expect(mocks.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ agent: 'opencode', model: 'PAC_controller/sonnet' }))
     })
 
     it('uses the probed current model variants for an explicit OpenCode Default selection', async () => {

@@ -138,6 +138,7 @@ export function createOpencodeBackend(opts: {
         command: getAgentLaunchCommand('opencode'),
         args,
         env: filterEnv(env),
+        ...(process.env.PAC_EXPERIMENTAL === '1' ? { childSessionUpdates: true } : {}),
         textChunkMode: 'delta',
         flavor: 'opencode',
     });

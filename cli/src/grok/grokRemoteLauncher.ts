@@ -424,6 +424,8 @@ class GrokRemoteLauncher extends RemoteLauncherBase {
                 break
             case 'usage':
                 break
+            case 'background_tasks':
+                break;
             default: {
                 const exhaustive: never = message
                 return exhaustive

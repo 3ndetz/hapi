@@ -15,6 +15,7 @@ interface PermissionResponseMessage {
     approved: boolean;
     decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort';
     reason?: string;
+    answers?: Record<string, string[]> | Record<string, { answers: string[] }>;
 }
 
 function pickOptionId(
@@ -68,6 +69,19 @@ export class OpencodePermissionHandler extends BasePermissionHandler<PermissionR
     ) {
         super(session);
         this.backend.onPermissionRequest((request) => this.handlePermissionRequest(request));
+        this.backend.onPermissionCancelled?.((id) => { void this.cancelPermission(id); });
+    }
+
+    private async cancelPermission(id: string): Promise<void> {
+        const request = this.pendingBackendRequests.get(id);
+        const pending = this.pendingRequests.get(id);
+        if (!request || !pending) return;
+        this.pendingBackendRequests.delete(id);
+        this.pendingRequests.delete(id);
+        pending.resolve();
+        this.finalizeRequest(id, { status: 'canceled', decision: 'abort', reason: 'Source command was cancelled' });
+        try { await this.backend.respondToPermission(request.sessionId, request, { outcome: 'cancelled' }); }
+        catch (error) { logger.debug('[Opencode] Failed to cancel source permission', error); }
     }
 
     private handlePermissionRequest(request: PermissionRequest): void {
@@ -79,13 +93,13 @@ export class OpencodePermissionHandler extends BasePermissionHandler<PermissionR
         const toolInput = deriveToolInput(request);
         const mode = this.getPermissionMode() ?? 'default';
 
-        const autoDecision = this.resolveAutoApprovalDecision(mode, toolName, request.toolCallId);
+        const autoDecision = request.pacQuestion ? null : this.resolveAutoApprovalDecision(mode, toolName, request.toolCallId);
         if (autoDecision) {
             void this.autoApprove(request, toolName, toolInput, autoDecision);
             return;
         }
 
-        if (mode === 'plan') {
+        if (mode === 'plan' && !request.pacQuestion) {
             void this.denyForPlanMode(request, toolName, toolInput);
             return;
         }
@@ -167,13 +181,25 @@ export class OpencodePermissionHandler extends BasePermissionHandler<PermissionR
         }
 
         const decision = response.decision ?? (response.approved ? 'approved' : 'denied');
+        let questionCancelled = false;
+        let questionAnswers: Record<string, string[]> | undefined;
 
         if (decision === 'abort' && pendingRequest) {
             await this.backend.cancelPrompt(pendingRequest.sessionId);
         }
 
         if (pendingRequest) {
-            const outcome = mapDecisionToOutcome(pendingRequest, decision);
+            let outcome = mapDecisionToOutcome(pendingRequest, decision);
+            if (pendingRequest.pacQuestion && outcome.outcome === 'selected' && (decision === 'approved' || decision === 'approved_for_session')) {
+                const entries = Object.entries(response.answers ?? {}).map(([key, value]) => [key, Array.isArray(value) ? value : value?.answers] as const);
+                if (!entries.length || entries.some(([, value]) => !Array.isArray(value) || value.some((item) => typeof item !== 'string'))) {
+                    outcome = { outcome: 'cancelled' };
+                    questionCancelled = true;
+                } else {
+                    questionAnswers = Object.fromEntries(entries);
+                    outcome = { ...outcome, pacAnswers: questionAnswers };
+                }
+            }
             await this.backend.respondToPermission(pendingRequest.sessionId, pendingRequest, outcome);
         }
 
@@ -182,9 +208,10 @@ export class OpencodePermissionHandler extends BasePermissionHandler<PermissionR
         logger.debug(`[Opencode] Permission ${response.approved ? 'approved' : 'denied'} for ${pending.toolName}`);
 
         return {
-            status: response.approved ? 'approved' : 'denied',
+            status: questionCancelled ? 'canceled' : response.approved ? 'approved' : 'denied',
             decision,
-            reason: response.reason
+            reason: response.reason,
+            ...(questionAnswers ? { answers: questionAnswers } : {})
         };
     }
 

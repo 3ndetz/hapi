@@ -16,6 +16,9 @@ function createGateway() {
                     if (payload.method.endsWith(':cursor-chat-store-status')) {
                         return JSON.stringify({ onDisk: false, store: null })
                     }
+                    if (payload.method.endsWith(':stop-session')) {
+                        return JSON.stringify({ status: 'stopped' })
+                    }
                     return JSON.stringify({
                         success: true,
                         method: payload.method,
@@ -52,6 +55,11 @@ function createGateway() {
 }
 
 describe('RpcGateway RPC timeouts', () => {
+    it('routes a PAC task stop to the owning session', async () => {
+        const { gateway, calls } = createGateway()
+        await gateway.stopPacTask('session-1', 'pac:child')
+        expect(calls).toEqual([{ method: 'session-1:stopPacTask', params: JSON.stringify({ taskId: 'pac:child' }) }])
+    })
     it('allows Codex startup and preflight to finish before the outer RPC expires', async () => {
         const { gateway, timeouts } = createGateway()
         await gateway.spawnSession('machine-1', 'C:\\workspace', 'codex')
@@ -64,6 +72,18 @@ describe('RpcGateway RPC timeouts', () => {
         await gateway.listMachineDirectory('machine-1', 'C:\\workspace')
 
         expect(timeouts).toEqual([30_000])
+    })
+    it('allows PAC-backed OpenCode sessions extra time without changing normal sessions', async () => {
+        const { gateway, timeouts } = createGateway()
+        await gateway.spawnSession('machine-1', 'C:\\workspace', 'opencode', 'PAC_host/sonnet')
+        await gateway.spawnSession('machine-1', 'C:\\workspace', 'opencode', 'ordinary/model')
+        expect(timeouts).toEqual([90_000, 30_000])
+    })
+
+    it('allows a runner to confirm session termination on a busy host', async () => {
+        const { gateway, timeouts } = createGateway()
+        expect(await gateway.stopRunnerSession('machine-1', 'session-1')).toBe('stopped')
+        expect(timeouts).toEqual([90_000])
     })
 
     it('uses an extended RPC timeout when listing Codex models', async () => {

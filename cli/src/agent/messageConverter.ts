@@ -41,6 +41,7 @@ export type CodexMessage =
         is_error?: boolean;
     }
     | { type: 'plan'; entries: PlanItem[] }
+    | { type: 'system'; subtype: 'background_tasks_changed'; tasks: Array<{ task_id: string; task_type: string; description: string }> }
     | { type: 'error'; message: string }
     | {
         type: 'generated-image';
@@ -120,6 +121,8 @@ export function convertAgentMessage(message: AgentMessage, model?: string | null
                 type: 'plan',
                 entries: message.items
             };
+        case 'background_tasks':
+            return { type: 'system', subtype: 'background_tasks_changed', tasks: message.tasks };
         case 'generated_image':
             return {
                 type: 'generated-image',

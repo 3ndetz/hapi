@@ -55,6 +55,7 @@ export type AgentMessage =
         contextWindow?: number;
     }
     | { type: 'plan'; items: PlanItem[] }
+    | { type: 'background_tasks'; tasks: Array<{ task_id: string; task_type: string; description: string }> }
     | { type: 'generated_image'; imageId: string; fileName: string; mimeType: string; source?: InlineMediaSource }
     | { type: 'turn_complete'; stopReason: string }
     | { type: 'error'; message: string };
@@ -74,10 +75,11 @@ export type PermissionRequest = {
     rawInput?: unknown;
     rawOutput?: unknown;
     options: PermissionOption[];
+    pacQuestion?: boolean;
 };
 
 export type PermissionResponse =
-    | { outcome: 'selected'; optionId: string }
+    | { outcome: 'selected'; optionId: string; pacAnswers?: Record<string, string[]> }
     | { outcome: 'cancelled' };
 
 export type AgentSessionModelDescriptor = {
@@ -109,6 +111,7 @@ export interface AgentBackend {
     cancelPrompt(sessionId: string): Promise<void>;
     respondToPermission(sessionId: string, request: PermissionRequest, response: PermissionResponse): Promise<void>;
     onPermissionRequest(handler: (request: PermissionRequest) => void): void;
+    onPermissionCancelled?(handler: (id: string) => void): void;
     disconnect(): Promise<void>;
 }
 

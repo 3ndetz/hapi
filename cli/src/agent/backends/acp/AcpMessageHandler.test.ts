@@ -25,6 +25,17 @@ describe('AcpMessageHandler', () => {
         vi.restoreAllMocks();
     });
 
+    it('forwards explicitly tagged PAC shell output as running progress', () => {
+        const messages: AgentMessage[] = [];
+        const handler = new AcpMessageHandler((message) => messages.push(message));
+        handler.handleUpdate({ sessionUpdate: ACP_SESSION_UPDATE_TYPES.toolCall, toolCallId: 'tool-stream', title: 'Bash',
+            rawInput: { command: 'example' }, status: 'in_progress' });
+        handler.handleUpdate({ sessionUpdate: ACP_SESSION_UPDATE_TYPES.toolCallUpdate, toolCallId: 'tool-stream', status: 'in_progress',
+            _meta: { pacShellStream: { stdout: 'first\n', truncated: false } } });
+        expect(messages).toContainEqual({ type: 'tool_call', id: 'tool-stream', name: 'Bash', input: { command: 'example' },
+            status: 'in_progress', progress: { output: 'first\n', truncated: false } });
+    });
+
     it('does not synthesize {status} output when tool completes without payload', () => {
         const messages: AgentMessage[] = [];
         const handler = new AcpMessageHandler((message) => messages.push(message));

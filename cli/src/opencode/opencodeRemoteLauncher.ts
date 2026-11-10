@@ -416,6 +416,15 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             };
         });
 
+        if (process.env.PAC_EXPERIMENTAL === '1') {
+            session.client.rpcHandlerManager.registerHandler(RPC_METHODS.StopPacTask, async (params: unknown) => {
+                if (!params || typeof params !== 'object' || !('taskId' in params) || typeof params.taskId !== 'string' || !params.taskId || params.taskId.length > 512) {
+                    throw new Error('Invalid PAC task identity');
+                }
+                return await backend.sendExtensionRequest('pac/tasks/stop', { sessionId: acpSessionId, taskId: params.taskId });
+            });
+        }
+
         session.client.rpcHandlerManager.registerHandler(RPC_METHODS.ListOpencodeReasoningEffortOptions, async () => {
             const effortOption = backend.getThoughtLevelConfigOption?.(acpSessionId);
             const currentModelId = backend.getSessionModelsMetadata?.(acpSessionId)?.currentModelId ?? null;
@@ -1315,6 +1324,7 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
                 this.messageBuffer.addMessage('Tool result received', 'result');
                 break;
             case 'usage':
+            case 'background_tasks':
                 break;
             case 'plan':
                 this.messageBuffer.addMessage('Plan updated', 'status');

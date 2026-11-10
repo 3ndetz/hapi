@@ -12,10 +12,15 @@ export function cleanupFailedStartupAfterExit(
     else child.once('exit', onExit);
 }
 
-export function sessionStartupTimeout(agent: string | undefined, configured?: string): number {
+export function sessionStartupTimeout(agent: string | undefined, configured?: string, model?: string): number {
     const explicit = Number(configured);
     if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    if (agent === 'opencode' && model?.startsWith('PAC_')) return 60_000;
     return agent === 'codex' ? 30_000 : 15_000;
+}
+
+export function isRecoverableStartup(agent: string | undefined, model?: string): boolean {
+    return agent === 'codex' || (agent === 'opencode' && model?.startsWith('PAC_') === true);
 }
 
 /** A caller's deadline does not prove that a shared execution failed to start. */

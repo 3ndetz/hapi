@@ -611,6 +611,14 @@ export class ApiClient {
         })
     }
 
+    async stopPacTask(sessionId: string, taskId: string): Promise<void> {
+        const response = await this.request<{ result?: { status?: string } }>(`/api/sessions/${encodeURIComponent(sessionId)}/pac-tasks/stop`, {
+            method: 'POST',
+            body: JSON.stringify({ taskId })
+        })
+        if (!['stop_requested', 'stopped'].includes(response.result?.status ?? '')) throw new Error('PAC task stop was not accepted')
+    }
+
     async clearConversation(sessionId: string): Promise<{ sessionId: string }> {
         return await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/clear`, { method: 'POST' })
     }

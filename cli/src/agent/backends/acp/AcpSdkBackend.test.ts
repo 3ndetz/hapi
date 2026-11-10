@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AgentMessage } from '@/agent/types';
+import type { AgentMessage, PermissionRequest } from '@/agent/types';
 import { AcpSdkBackend } from './AcpSdkBackend';
 import { AcpMessageHandler } from './AcpMessageHandler';
 import { buildAcpStdioSpawnOptions } from './AcpStdioTransport';
@@ -187,6 +187,69 @@ describe('AcpSdkBackend', () => {
         });
 
         expect(capturedRequestId).toBe('tool-approve');
+    });
+
+    it('returns PAC question answers only for explicitly tagged requests', async () => {
+        const backend = new AcpSdkBackend({ command: 'opencode' });
+        backend.onPermissionRequest((request) => {
+            void backend.respondToPermission(request.sessionId, request, {
+                outcome: 'selected', optionId: 'answer', pacAnswers: { '0': ['one', 'two'] }
+            });
+        });
+        const internal = backend as unknown as { handlePermissionRequest: (params: unknown, requestId: string | number | null) => Promise<unknown> };
+        const request = { sessionId: 'session', toolCall: { toolCallId: 'question', title: 'AskUserQuestion' },
+            options: [{ optionId: 'answer', name: 'Answer', kind: 'allow_once' }] };
+        await expect(internal.handlePermissionRequest({ ...request, _meta: { pac: { question: true } } }, null)).resolves.toEqual({
+            outcome: { outcome: 'selected', optionId: 'answer' }, _meta: { pac: { answers: { '0': ['one', 'two'] } } }
+        });
+        await expect(internal.handlePermissionRequest(request, null)).resolves.toEqual({ outcome: { outcome: 'selected', optionId: 'answer' } });
+    });
+
+    it('keeps concurrent PAC answers bound to their own tool calls', async () => {
+        const backend = new AcpSdkBackend({ command: 'opencode' });
+        const requests: PermissionRequest[] = [];
+        backend.onPermissionRequest((request) => { requests.push(request); });
+        const internal = backend as unknown as { handlePermissionRequest: (params: unknown, requestId: string | number | null) => Promise<unknown> };
+        const create = (id: string) => internal.handlePermissionRequest({ sessionId: 'session', _meta: { pac: { question: true } },
+            toolCall: { toolCallId: id, title: 'AskUserQuestion' }, options: [{ optionId: 'answer', name: 'Answer', kind: 'allow_once' }] }, null);
+        const first = create('question-one');
+        const second = create('question-two');
+        await backend.respondToPermission('session', requests[1], { outcome: 'selected', optionId: 'answer', pacAnswers: { '0': ['second'] } });
+        await backend.respondToPermission('session', requests[0], { outcome: 'selected', optionId: 'answer', pacAnswers: { '0': ['first'] } });
+        await expect(first).resolves.toMatchObject({ _meta: { pac: { answers: { '0': ['first'] } } } });
+        await expect(second).resolves.toMatchObject({ _meta: { pac: { answers: { '0': ['second'] } } } });
+    });
+
+    it('accepts cancellation only for a scoped PAC permission in the active session', () => {
+        const backend = new AcpSdkBackend({ command: 'opencode', childSessionUpdates: true });
+        const cancellations: string[] = [];
+        backend.onPermissionCancelled((id) => cancellations.push(id));
+        const internal = backend as unknown as { activeSessionId: string; handleNotification: (method: string, params: unknown) => void };
+        internal.activeSessionId = 'session';
+        const id = 'pac-terminal-12345678-1234-1234-1234-123456789abc';
+        internal.handleNotification('pac/permission/cancelled', { sessionId: 'other', toolCallId: id });
+        internal.handleNotification('pac/permission/cancelled', { sessionId: 'session', toolCallId: 'unrelated' });
+        internal.handleNotification('pac/permission/cancelled', { sessionId: 'session', toolCallId: id });
+        const fileId = 'pac-file-12345678-1234-1234-1234-123456789abc';
+        internal.handleNotification('pac/permission/cancelled', { sessionId: 'session', toolCallId: fileId });
+        expect(cancellations).toEqual([id, fileId]);
+    });
+
+    it('accepts cancellation for a tagged pending PAC question', async () => {
+        const backend = new AcpSdkBackend({ command: 'opencode', childSessionUpdates: true });
+        const cancellations: string[] = [];
+        let captured: PermissionRequest | undefined;
+        backend.onPermissionRequest((request) => { captured = request; });
+        backend.onPermissionCancelled((id) => cancellations.push(id));
+        const internal = backend as unknown as { activeSessionId: string; handleNotification: (method: string, params: unknown) => void;
+            handlePermissionRequest: (params: unknown, requestId: string | number | null) => Promise<unknown> };
+        internal.activeSessionId = 'session';
+        const pending = internal.handlePermissionRequest({ sessionId: 'session', _meta: { pac: { question: true } },
+            toolCall: { toolCallId: 'toolu-question', title: 'AskUserQuestion' }, options: [] }, null);
+        internal.handleNotification('pac/permission/cancelled', { sessionId: 'session', toolCallId: 'toolu-question' });
+        expect(cancellations).toEqual(['toolu-question']);
+        await backend.respondToPermission('session', captured!, { outcome: 'cancelled' });
+        await pending;
     });
 
     it('uses session/set_model by default (gemini flavor)', async () => {
@@ -2128,6 +2191,23 @@ describe('AcpSdkBackend OpenCode child session updates', () => {
     function notify(internal: ChildBackendInternal, notification: { method: string; params: unknown }): void {
         internal.handleNotification(notification.method, notification.params);
     }
+
+    it('forwards validated PAC background snapshots after the parent turn', async () => {
+        useFastDrains();
+        const { backend, internal } = makeBackend();
+        const messages: AgentMessage[] = [];
+        await backend.prompt('session-1', [{ type: 'text', text: 'hi' }], (message) => messages.push(message));
+        const tasks = [{ task_id: 'pac:child', task_type: 'agent', description: 'Background worker' }];
+        internal.handleNotification('pac/background_tasks_changed', { rootSessionId: 'other', tasks });
+        internal.handleNotification('pac/background_tasks_changed', { rootSessionId: 'session-1', tasks: [{ task_id: 4 }] });
+        internal.handleNotification('pac/background_tasks_changed', { rootSessionId: 'session-1', tasks });
+        internal.handleNotification('pac/background_tasks_changed', { rootSessionId: 'session-1', tasks: [] });
+        await sleep(20);
+        expect(messages.filter((message) => message.type === 'background_tasks')).toEqual([
+            { type: 'background_tasks', tasks },
+            { type: 'background_tasks', tasks: [] }
+        ]);
+    });
 
     it('keeps parent text and child text in separate messages when interleaved (a)', async () => {
         useFastDrains();

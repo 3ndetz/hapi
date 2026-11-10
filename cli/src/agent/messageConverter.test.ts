@@ -240,6 +240,11 @@ describe('convertAgentMessage', () => {
         expect(convertAgentMessage({ type: 'not_a_real_type' } as never)).toBeNull();
     });
 
+    it('converts background task snapshots into the hub system format', () => {
+        const tasks = [{ task_id: 'pac:child', task_type: 'agent', description: 'Background worker' }];
+        expect(convertAgentMessage({ type: 'background_tasks', tasks })).toEqual({ type: 'system', subtype: 'background_tasks_changed', tasks });
+    });
+
     it('converts generated_image messages into generated-image wire payloads', () => {
         const converted = convertAgentMessage({
             type: 'generated_image',

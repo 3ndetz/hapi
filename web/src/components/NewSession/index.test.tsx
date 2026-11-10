@@ -1072,6 +1072,21 @@ describe('NewSession launch preferences', () => {
         expect(mocks.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ agent: 'opencode', model: 'PAC_controller/sonnet' }))
     })
 
+    it('keeps an unavailable PAC selected and blocks launch until the user chooses another model', async () => {
+        savePreferredAgent('opencode')
+        mocks.opencodeModels = [{ modelId: 'PAC_controller/sonnet', name: 'PAC controller Sonnet' }]
+        const view = render(<NewSession api={api} machines={[machine]} initialMachineId="machine-1" initialDirectory="C:\repo" onSuccess={mocks.onSuccess} onCancel={() => {}} />)
+        await waitFor(() => expect(screen.getByTestId('create')).toBeEnabled())
+        fireEvent.click(screen.getByTestId('opencode-model-pac'))
+        await waitFor(() => expect(screen.getByTestId('create')).toBeEnabled())
+        mocks.opencodeModels = [{ modelId: 'provider/model', name: 'Local model' }]
+        view.rerender(<NewSession api={api} machines={[machine]} initialMachineId="machine-1" initialDirectory="C:\repo" onSuccess={mocks.onSuccess} onCancel={() => {}} />)
+        await waitFor(() => expect(screen.getByTestId('create')).toBeDisabled())
+        expect(screen.getByTestId('opencode-model')).toHaveTextContent('PAC_controller/sonnet')
+        fireEvent.click(screen.getByTestId('opencode-model-pick'))
+        await waitFor(() => expect(screen.getByTestId('create')).toBeEnabled())
+    })
+
     it('uses the probed current model variants for an explicit OpenCode Default selection', async () => {
         savePreferredAgent('opencode')
         mocks.opencodeVariants = { 'provider/current': ['low', 'high'] }

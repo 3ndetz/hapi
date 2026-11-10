@@ -65,4 +65,15 @@ describe('OpencodeModelSelector', () => {
         fireEvent.click(screen.getByRole('button', { name: /retry/i }))
         expect(onRetry).toHaveBeenCalledOnce()
     })
+
+    it('shows the unavailable selected PAC and allows an explicit replacement', () => {
+        const onModelChange = vi.fn()
+        render(<I18nProvider><OpencodeModelSelector cwd="/project" machineId="machine-1" isLoading={false} error={null}
+            availableModels={[{ modelId: 'local/model', name: 'Local model' }]} currentModelId={null}
+            selectedModel="PAC_controller/sonnet" onModelChange={onModelChange} /></I18nProvider>)
+        expect(screen.getByRole('combobox')).toHaveValue('PAC_controller/sonnet')
+        expect(screen.getByRole('status')).toHaveTextContent(/unavailable/i)
+        fireEvent.change(screen.getByRole('combobox'), { target: { value: 'local/model' } })
+        expect(onModelChange).toHaveBeenCalledWith('local/model')
+    })
 })

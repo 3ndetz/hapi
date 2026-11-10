@@ -906,6 +906,10 @@ export function NewSession(props: {
         if (opencodeSelectedModel === null) {
             return
         }
+        // Never silently replace a chosen PAC when its catalog disappears.
+        if (opencodeSelectedModel?.startsWith('PAC_')) {
+            return
+        }
         if (
             opencodeSelectedModel !== undefined
             && opencodeModelsState.availableModels.some(
@@ -1937,6 +1941,11 @@ export function NewSession(props: {
         }
     }
 
+    const unavailablePacSelection = agent === 'opencode'
+        && Boolean(opencodeSelectedModel?.startsWith('PAC_'))
+        && !opencodeModelsState.isLoading
+        && (Boolean(opencodeModelsState.error)
+            || !opencodeModelsState.availableModels.some((candidate) => candidate.modelId === opencodeSelectedModel))
     const isLaunchPreferenceValidationPending =
         (agent === 'codex'
             && (model !== 'auto' || modelReasoningEffort !== 'default')
@@ -1993,6 +2002,7 @@ export function NewSession(props: {
         && !agentAvailability.isLoading
         && !agentAvailability.error
         && selectedAgentAvailable
+        && !unavailablePacSelection
         && !isLaunchPreferenceValidationPending
         && !fastModeSelectionPending
     )

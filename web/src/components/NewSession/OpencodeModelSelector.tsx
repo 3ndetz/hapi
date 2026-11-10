@@ -18,6 +18,8 @@ export type OpencodeModelSelectorProps = {
 
 export function OpencodeModelSelector(props: OpencodeModelSelectorProps) {
     const { t } = useTranslation()
+    const unavailablePac = Boolean(props.selectedModel?.startsWith('PAC_'))
+        && !props.availableModels.some((model) => model.modelId === props.selectedModel)
 
     if (!props.cwd || !props.machineId) {
         return null
@@ -75,24 +77,29 @@ export function OpencodeModelSelector(props: OpencodeModelSelectorProps) {
                         </button>
                     ) : null}
                 </div>
-            ) : props.availableModels.length === 0 ? (
+            ) : props.availableModels.length === 0 && !unavailablePac ? (
                 <div className="text-xs text-[var(--app-hint)]" data-testid="opencode-model-empty">
                     {t('newSession.opencodeModel.empty')}
                 </div>
             ) : (
-                <SelectControl
+                <><SelectControl
                     data-testid="opencode-model-list"
                     value={props.selectedModel ?? ''}
                     onChange={(event) => props.onModelChange(event.target.value || null)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--app-divider)] bg-[var(--app-bg)] text-[var(--app-text)] focus:outline-none focus:ring-2 focus:ring-[var(--app-link)]"
                 >
                     <option value="">{t('newSession.model.default')}</option>
+                    {unavailablePac ? <option value={props.selectedModel ?? ''} disabled>{props.selectedModel}</option> : null}
                     {props.availableModels.map((model) => (
                         <option key={model.modelId} value={model.modelId}>
                             {model.name ?? model.modelId}{props.currentModelId === model.modelId ? ` (${t('newSession.opencodeModel.default')})` : ''}
                         </option>
                     ))}
                 </SelectControl>
+                {unavailablePac ? <div role="status" className="text-xs text-[var(--app-hint)]">
+                    {t('newSession.opencodeModel.pacUnavailable')}{' '}
+                    {props.onRetry ? <button type="button" onClick={props.onRetry} className="text-[var(--app-link)] underline">{t('newSession.opencodeModel.retry')}</button> : null}
+                </div> : null}</>
             )}
         </div>
     )

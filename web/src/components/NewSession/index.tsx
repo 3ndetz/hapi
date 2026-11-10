@@ -1755,6 +1755,26 @@ export function NewSession(props: {
                 return
             }
 
+            // The form can stay open while a remote PAC disconnects. Recheck the
+            // selected model at launch instead of relying on the cached catalog.
+            if (agent === 'opencode' && opencodeSelectedModel?.startsWith('PAC_')) {
+                let available = false
+                try {
+                    const catalog = await props.api.getMachineOpencodeModelsForCwd(machineId, trimmedDirectory)
+                    available = catalog.success && Boolean(catalog.availableModels?.some(
+                        (candidate) => candidate.modelId === opencodeSelectedModel
+                    ))
+                } catch {
+                    // A failed check must not launch a different account or model.
+                }
+                if (!available) {
+                    haptic.notification('error')
+                    setError(t('newSession.opencodeModel.pacUnavailable'))
+                    opencodeModelsState.refetch()
+                    return
+                }
+            }
+
             if (
                 agent === 'cursor'
                 && cursorPicker.mode === 'dual'

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     onSuccess: vi.fn(),
     notification: vi.fn(),
     checkPathsExists: vi.fn(),
+    getMachineOpencodeModelsForCwd: vi.fn(),
     availableAgents: [
         'agy', 'claude', 'codex', 'dsh', 'copilot', 'cursor', 'grok', 'kimi', 'opencode', 'pi'
     ].map((agent) => ({ agent, available: true })),
@@ -308,13 +309,15 @@ vi.mock('./ActionButtons', () => ({
 import { NewSession } from './index'
 
 const machine = { id: 'machine-1' } as Machine
-const api = {} as ApiClient
+const api = { getMachineOpencodeModelsForCwd: mocks.getMachineOpencodeModelsForCwd } as unknown as ApiClient
 
 describe('NewSession launch preferences', () => {
     beforeEach(() => {
         localStorage.clear()
         sessionStorage.clear()
         mocks.spawnSession.mockReset()
+        mocks.getMachineOpencodeModelsForCwd.mockReset()
+        mocks.getMachineOpencodeModelsForCwd.mockImplementation(async () => ({ success: true, availableModels: mocks.opencodeModels }))
         mocks.onSuccess.mockReset()
         mocks.notification.mockReset()
         mocks.checkPathsExists.mockReset()
@@ -1070,6 +1073,24 @@ describe('NewSession launch preferences', () => {
         fireEvent.click(screen.getByTestId('create'))
         await waitFor(() => expect(mocks.onSuccess).toHaveBeenCalledWith('pac-session'))
         expect(mocks.spawnSession).toHaveBeenCalledWith(expect.objectContaining({ agent: 'opencode', model: 'PAC_controller/sonnet' }))
+        expect(mocks.getMachineOpencodeModelsForCwd).toHaveBeenCalledWith('machine-1', 'C:\\repo')
+    })
+
+    it.each([
+        ['disappears from the refreshed catalog', () => ({ success: true, availableModels: [{ modelId: 'provider/local' }] })],
+        ['catalog request fails', () => { throw new Error('offline') }],
+        ['catalog reports failure', () => ({ success: false })],
+    ])('does not launch a PAC that %s', async (_label, response) => {
+        savePreferredAgent('opencode')
+        mocks.opencodeModels = [{ modelId: 'PAC_controller/sonnet', name: 'PAC controller Sonnet' }]
+        mocks.getMachineOpencodeModelsForCwd.mockImplementation(async () => response())
+        render(<NewSession api={api} machines={[machine]} initialMachineId="machine-1" initialDirectory="C:\repo" onSuccess={mocks.onSuccess} onCancel={() => {}} />)
+        fireEvent.click(screen.getByTestId('opencode-model-pac'))
+        await waitFor(() => expect(screen.getByTestId('create')).toBeEnabled())
+        fireEvent.click(screen.getByTestId('create'))
+        await waitFor(() => expect(screen.getByText('newSession.opencodeModel.pacUnavailable')).toBeInTheDocument())
+        expect(mocks.spawnSession).not.toHaveBeenCalled()
+        expect(screen.getByTestId('opencode-model')).toHaveTextContent('PAC_controller/sonnet')
     })
 
     it('keeps an unavailable PAC selected and blocks launch until the user chooses another model', async () => {
@@ -1089,7 +1110,7 @@ describe('NewSession launch preferences', () => {
 
     it('does not replace an unavailable remembered PAC with a local model', async () => {
         savePreferredAgent('opencode')
-        savePreferredLaunchSettings('machine-1', 'opencode', { model: 'PAC_controller/sonnet', effort: 'auto', permissionMode: 'default' })
+        savePreferredLaunchSettings('machine-1', 'opencode', { model: 'PAC_controller/sonnet', cursorSelectedBase: 'auto', effort: 'auto', modelReasoningEffort: 'default', permissionMode: 'default' })
         mocks.opencodeModels = [{ modelId: 'provider/model', name: 'Local model' }]
         render(<NewSession api={api} machines={[machine]} initialMachineId="machine-1" initialDirectory="C:\repo" onSuccess={mocks.onSuccess} onCancel={() => {}} />)
         await waitFor(() => expect(screen.getByTestId('opencode-model')).toHaveTextContent('PAC_controller/sonnet'))

@@ -167,7 +167,8 @@ export async function listOpencodeModelsForCwd(
     const promise = (async () => {
         try {
             const response = await runOpencodeProbe(trimmed);
-            if (response.success && !response.pacDiscoveryWarnings?.length) {
+            if (response.success && !response.pacDiscoveryWarnings?.length &&
+                !response.availableModels?.some((model) => model.modelId.startsWith('PAC_'))) {
                 cache.set(trimmed, {
                     expiresAt: Date.now() + CACHE_TTL_MS,
                     response

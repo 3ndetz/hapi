@@ -34,7 +34,9 @@ export function useOpencodeModelsForCwd(args: {
             return await api.getMachineOpencodeModelsForCwd(machineId, trimmedCwd)
         },
         enabled,
-        staleTime: 60_000,
+        // PAC registration can change independently of the local model catalog.
+        staleTime: (current) => current.state.data?.pacDiscoveryWarnings?.length ||
+            current.state.data?.availableModels?.some((model) => model.modelId.startsWith('PAC_')) ? 0 : 60_000,
         retry: false,
     })
 

@@ -168,6 +168,20 @@ describe('listOpencodeModelsForCwd', () => {
         expect(transportCreate).toHaveBeenCalledTimes(2)
     })
 
+    it('refreshes a successful PAC catalog instead of serving an offline PAC from the probe cache', async () => {
+        sendRequestMock
+            .mockResolvedValueOnce({ protocolVersion: 1 })
+            .mockResolvedValueOnce({ models: { availableModels: [{ modelId: 'PAC_work/model' }] } })
+            .mockResolvedValueOnce({ protocolVersion: 1 })
+            .mockResolvedValueOnce({ models: { availableModels: [{ modelId: 'local/model' }] },
+                _meta: { pacDiscoveryWarnings: [{ name: 'work', code: 'unavailable' }] } })
+        expect((await listOpencodeModelsForCwd('/pac/cwd')).availableModels).toEqual([{ modelId: 'PAC_work/model' }])
+        const offline = await listOpencodeModelsForCwd('/pac/cwd')
+        expect(offline.availableModels).toEqual([{ modelId: 'local/model' }])
+        expect(offline.pacDiscoveryWarnings).toEqual([{ name: 'work', code: 'unavailable' }])
+        expect(transportCreate).toHaveBeenCalledTimes(2)
+    })
+
     it('coalesces concurrent probes for the same cwd into a single transport spawn', async () => {
         let resolveSecond: (value: unknown) => void = () => undefined
         sendRequestMock

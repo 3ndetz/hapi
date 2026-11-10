@@ -890,8 +890,7 @@ export function NewSession(props: {
     ])
 
     useEffect(() => {
-        // Restore a remembered model when it is still advertised for this cwd;
-        // otherwise auto-pick the backend default.
+        // Keep a remembered PAC visible even when its catalog is unavailable.
         if (
             agent !== 'opencode'
             || deferredDirectoryExists !== true
@@ -926,7 +925,7 @@ export function NewSession(props: {
             && opencodeModelsState.availableModels.some(
                 (candidate) => candidate.modelId === rememberedModel
             )
-        const fallback = (rememberedModelAvailable ? rememberedModel : null)
+        const fallback = (rememberedModel?.startsWith('PAC_') || rememberedModelAvailable ? rememberedModel : null)
             ?? opencodeModelsState.currentModelId
             ?? opencodeModelsState.availableModels[0]?.modelId
             ?? null

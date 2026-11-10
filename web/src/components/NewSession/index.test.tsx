@@ -1087,6 +1087,15 @@ describe('NewSession launch preferences', () => {
         await waitFor(() => expect(screen.getByTestId('create')).toBeEnabled())
     })
 
+    it('does not replace an unavailable remembered PAC with a local model', async () => {
+        savePreferredAgent('opencode')
+        savePreferredLaunchSettings('machine-1', 'opencode', { model: 'PAC_controller/sonnet', effort: 'auto', permissionMode: 'default' })
+        mocks.opencodeModels = [{ modelId: 'provider/model', name: 'Local model' }]
+        render(<NewSession api={api} machines={[machine]} initialMachineId="machine-1" initialDirectory="C:\repo" onSuccess={mocks.onSuccess} onCancel={() => {}} />)
+        await waitFor(() => expect(screen.getByTestId('opencode-model')).toHaveTextContent('PAC_controller/sonnet'))
+        expect(screen.getByTestId('create')).toBeDisabled()
+    })
+
     it('uses the probed current model variants for an explicit OpenCode Default selection', async () => {
         savePreferredAgent('opencode')
         mocks.opencodeVariants = { 'provider/current': ['low', 'high'] }

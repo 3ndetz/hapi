@@ -124,6 +124,7 @@ const inFlightByCwd = new Map<string | null, Promise<ListOpencodeModelVariantsRe
 const IDLE_REAP_MS = 10 * 60 * 1000;
 
 async function stopServe(proc: ReturnType<typeof Bun.spawn>): Promise<void> {
+    if (proc.exitCode !== null) return;
     if (process.platform === 'win32' && proc.pid) {
         try { if (await killProcessTreeByPid(proc.pid, true)) return; } catch { /* Fall back to the owned child. */ }
     }
@@ -141,11 +142,11 @@ function registerExitCleanup(): void {
     if (exitCleanupRegistered) return;
     exitCleanupRegistered = true;
     const killResident = () => {
-        if (resident && process.platform === 'win32' && resident.proc.pid) {
+        if (resident && resident.proc.exitCode === null && process.platform === 'win32' && resident.proc.pid) {
             const result = spawnSync('taskkill.exe', ['/PID', String(resident.proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
             if (result.status !== 0) resident.proc.kill();
-        } else {
-            resident?.proc.kill();
+        } else if (resident?.proc.exitCode === null) {
+            resident.proc.kill();
         }
         resident = null;
     };

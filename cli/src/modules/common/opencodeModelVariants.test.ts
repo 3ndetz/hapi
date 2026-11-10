@@ -247,6 +247,18 @@ describe('listOpencodeModelVariants resident lifecycle', () => {
         expect(serveProcs().length).toBe(2);
     });
 
+    it('does not signal a PID after its catalog process has exited', async () => {
+        const first = mod.listOpencodeModelVariants({ cwd: '/a' });
+        await vi.advanceTimersByTimeAsync(300);
+        await first;
+        const exited = serveProcs()[0];
+        Object.assign(exited, { pid: 12345, exitCode: 0 });
+        const second = mod.listOpencodeModelVariants({ cwd: '/b' });
+        await vi.advanceTimersByTimeAsync(300);
+        await second;
+        expect(exited.kill).not.toHaveBeenCalled();
+    });
+
     it('does not coalesce concurrent calls for different cwds', async () => {
         const first = mod.listOpencodeModelVariants({ cwd: '/a' });
         const second = mod.listOpencodeModelVariants({ cwd: '/b' });

@@ -2141,6 +2141,7 @@ export function NewSession(props: {
                     machineId={machineId}
                     isLoading={opencodeModelsState.isLoading}
                     error={opencodeModelsState.error}
+                    pacDiscoveryWarnings={opencodeModelsState.pacDiscoveryWarnings}
                     availableModels={opencodeModelsState.availableModels}
                     currentModelId={opencodeModelsState.currentModelId}
                     selectedModel={opencodeSelectedModel}

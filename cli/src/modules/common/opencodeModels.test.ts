@@ -137,6 +137,37 @@ describe('listOpencodeModelsForCwd', () => {
         expect(sendRequestMock).toHaveBeenCalledTimes(2)
     })
 
+    it('preserves safe PAC warnings and retries partial discovery without caching', async () => {
+        sendRequestMock
+            .mockResolvedValueOnce({ protocolVersion: 1 })
+            .mockResolvedValueOnce({
+                models: { availableModels: [{ modelId: 'local/model' }] },
+                _meta: { pacDiscoveryWarnings: [
+                    { name: 'offline', code: 'unavailable', secret: 'not-for-clients' },
+                    { name: 'project', code: 'source_setup_failed' },
+                    { name: 'rules', code: 'rule_frontmatter_unsupported' },
+                    { name: 'imports', code: 'external_import_unsupported' },
+                    { name: 'bad/name', code: 'unavailable' },
+                    { name: 'ignored', code: 'unknown' }
+                ] }
+            })
+            .mockResolvedValueOnce({ protocolVersion: 1 })
+            .mockResolvedValueOnce({ models: { availableModels: [{ modelId: 'local/model' }, { modelId: 'PAC_offline/model' }] } })
+
+        const partial = await listOpencodeModelsForCwd('/partial/cwd')
+        expect(partial.availableModels).toEqual([{ modelId: 'local/model' }])
+        expect(partial.pacDiscoveryWarnings).toEqual([
+            { name: 'offline', code: 'unavailable' },
+            { name: 'project', code: 'source_setup_failed' },
+            { name: 'rules', code: 'rule_frontmatter_unsupported' },
+            { name: 'imports', code: 'external_import_unsupported' }
+        ])
+        expect(JSON.stringify(partial)).not.toContain('not-for-clients')
+        const recovered = await listOpencodeModelsForCwd('/partial/cwd')
+        expect(recovered.availableModels).toHaveLength(2)
+        expect(transportCreate).toHaveBeenCalledTimes(2)
+    })
+
     it('coalesces concurrent probes for the same cwd into a single transport spawn', async () => {
         let resolveSecond: (value: unknown) => void = () => undefined
         sendRequestMock

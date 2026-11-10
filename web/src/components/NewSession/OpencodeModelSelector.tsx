@@ -1,5 +1,6 @@
 import { useTranslation } from '@/lib/use-translation'
 import type { OpencodeModelSummary } from '@/types/api'
+import type { PacDiscoveryWarning } from '@hapi/protocol/apiTypes'
 import { SelectControl } from '@/components/ui/select-control'
 
 export type OpencodeModelSelectorProps = {
@@ -7,6 +8,7 @@ export type OpencodeModelSelectorProps = {
     machineId: string | null
     isLoading: boolean
     error: string | null
+    pacDiscoveryWarnings?: PacDiscoveryWarning[]
     availableModels: OpencodeModelSummary[]
     currentModelId: string | null
     selectedModel: string | null | undefined
@@ -27,6 +29,21 @@ export function OpencodeModelSelector(props: OpencodeModelSelectorProps) {
                 {t('newSession.model')}{' '}
                 <span className="font-normal">({t('newSession.model.optional')})</span>
             </label>
+
+            {!props.isLoading && !props.error && props.pacDiscoveryWarnings?.length ? (
+                <div role="status" className="flex flex-col gap-1 text-xs text-[var(--app-hint)]" data-testid="pac-discovery-warnings">
+                    {props.pacDiscoveryWarnings.map((warning) => (
+                        <div key={`${warning.name}:${warning.code}`}>
+                            <span className="font-medium">{warning.name}: </span>
+                            {warning.code === 'rule_frontmatter_unsupported' ? t('newSession.opencodeModel.pacRuleUnsupported')
+                                : warning.code === 'external_import_unsupported' ? t('newSession.opencodeModel.pacExternalImportUnsupported')
+                                    : warning.code === 'source_setup_failed' ? t('newSession.opencodeModel.pacSourceSetupFailed')
+                                        : t('newSession.opencodeModel.pacUnavailable')}
+                        </div>
+                    ))}
+                    {props.onRetry ? <button type="button" onClick={props.onRetry} className="self-start text-[var(--app-link)] underline">{t('newSession.opencodeModel.retry')}</button> : null}
+                </div>
+            ) : null}
 
             {props.isLoading ? (
                 <div className="flex flex-col gap-2" data-testid="opencode-model-loading">

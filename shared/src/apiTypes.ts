@@ -894,12 +894,18 @@ export type OpencodeModelSummary = {
     name?: string
 }
 
+export type PacDiscoveryWarning = {
+    name: string
+    code: 'unavailable' | 'source_setup_failed' | 'rule_frontmatter_unsupported' | 'external_import_unsupported'
+}
+
 export type OpencodeModelsResponse = {
     success: boolean
     availableModels?: OpencodeModelSummary[]
     /** CLI `agent --list-models` skus grouped under ACP wire bases for variant pickers. */
     cliModelSkus?: OpencodeModelSummary[]
     currentModelId?: string | null
+    pacDiscoveryWarnings?: PacDiscoveryWarning[]
     error?: string
 }
 

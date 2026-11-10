@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { OpencodeModelSummary } from '@/types/api'
+import type { OpencodeModelSummary, PacDiscoveryWarning } from '@hapi/protocol/apiTypes'
 import { queryKeys } from '@/lib/query-keys'
 
 export function useOpencodeModelsForCwd(args: {
@@ -13,6 +13,7 @@ export function useOpencodeModelsForCwd(args: {
     currentModelId: string | null
     isLoading: boolean
     error: string | null
+    pacDiscoveryWarnings: PacDiscoveryWarning[]
     refetch: () => void
 } {
     const { api, machineId, cwd } = args
@@ -41,6 +42,7 @@ export function useOpencodeModelsForCwd(args: {
         availableModels: query.data?.availableModels ?? [],
         currentModelId: query.data?.currentModelId ?? null,
         isLoading: query.isLoading,
+        pacDiscoveryWarnings: query.data?.pacDiscoveryWarnings ?? [],
         error: query.data?.success === false
             ? (query.data.error ?? 'Failed to load OpenCode models')
             : query.error instanceof Error

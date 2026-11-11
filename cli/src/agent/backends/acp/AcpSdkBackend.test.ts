@@ -54,6 +54,21 @@ afterEach(() => {
 });
 
 describe('AcpSdkBackend', () => {
+    it('forwards PAC background snapshots only for the active session', () => {
+        const backend = new AcpSdkBackend({ command: 'agent' });
+        const listener = vi.fn();
+        backend.setPacBackgroundTasksListener(listener);
+        const internal = backend as unknown as { activeSessionId: string; handleNotification: (method: string, params: unknown) => void };
+        internal.activeSessionId = 's';
+        const task = { task_id: 'pac-shell-1', task_type: 'local_bash', description: 'command', secret: 'ignored' };
+        internal.handleNotification('pac/background_tasks_changed', { rootSessionId: 'other', tasks: [task] });
+        expect(listener).not.toHaveBeenCalled();
+        internal.handleNotification('pac/background_tasks_changed', { rootSessionId: 's', tasks: [task] });
+        expect(listener).toHaveBeenCalledWith([{ task_id: 'pac-shell-1', task_type: 'local_bash', description: 'command' }]);
+        internal.handleNotification('pac/background_tasks_changed', { rootSessionId: 's', tasks: [] });
+        expect(listener).toHaveBeenLastCalledWith([]);
+    });
+
     it('routes PAC questions through a form instead of auto-approving permissions', async () => {
         const backend = new AcpSdkBackend({ command: 'agent' });
         const form = vi.fn().mockResolvedValue({ action: 'accept', content: { q0_custom: 'custom', q1: ['Red', 'Blue'] } });

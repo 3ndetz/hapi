@@ -353,6 +353,10 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
         this.backend = backend;
         registerAcpSessionTitleSync(backend, session.client, titleSync);
 
+        backend.setPacBackgroundTasksListener?.((tasks) => session.client.sendClaudeSessionMessage({
+            type: 'system', uuid: randomUUID(), subtype: 'background_tasks_changed', tasks
+        }));
+
         backend.onStderrError((error) => {
             this.handleAcpStderrError(error);
         });

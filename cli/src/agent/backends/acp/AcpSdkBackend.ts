@@ -133,6 +133,7 @@ export class AcpSdkBackend implements AgentBackend {
     private promptUsageCallback: ((msg: AgentMessage) => void) | null = null;
     private usageUpdateListener: ((msg: AgentMessage) => void) | null = null;
     private sessionInfoUpdateListener: ((update: AcpSessionInfoUpdate) => void) | null = null;
+    private pacBackgroundTasksListener: ((tasks: Array<{ task_id: string; task_type: string; description: string }>) => void) | null = null;
     private userMessageChunkListener: ((text: string) => void) | null = null;
     /** Fired on foreground ACP state / permission so launchers can bump hub thinking (#1470). */
     private agentActivityListener: ((thinking: boolean) => void) | null = null;
@@ -644,6 +645,10 @@ export class AcpSdkBackend implements AgentBackend {
     /** Forwards stable ACP session metadata updates independently of prompt streaming. */
     setSessionInfoUpdateListener(listener: ((update: AcpSessionInfoUpdate) => void) | null): void {
         this.sessionInfoUpdateListener = listener;
+    }
+
+    setPacBackgroundTasksListener(listener: ((tasks: Array<{ task_id: string; task_type: string; description: string }>) => void) | null): void {
+        this.pacBackgroundTasksListener = listener;
     }
 
     /** Called in order with agent output: text buffered before an echo is flushed first. */
@@ -1188,6 +1193,12 @@ export class AcpSdkBackend implements AgentBackend {
     private handleNotification(method: string, params: unknown): void {
         if (method === 'session/update') {
             this.handleSessionUpdate(params);
+        } else if (method === 'pac/background_tasks_changed' && isObject(params) &&
+            params.rootSessionId === this.activeSessionId && Array.isArray(params.tasks) && params.tasks.length <= 100) {
+            const tasks = params.tasks.filter((task): task is Record<string, unknown> => isObject(task) &&
+                typeof task.task_id === 'string' && typeof task.task_type === 'string' && typeof task.description === 'string')
+                .map((task) => ({ task_id: task.task_id as string, task_type: task.task_type as string, description: task.description as string }));
+            this.pacBackgroundTasksListener?.(tasks);
         } else if (method === OPENCODE_CHILD_UPDATE_METHOD && this.options.childSessionUpdates) {
             this.handleChildSessionUpdate(params);
         } else if (

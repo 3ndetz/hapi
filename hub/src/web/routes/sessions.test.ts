@@ -59,6 +59,7 @@ type ReopenResultMock =
     | { type: 'incomplete'; message: string; missing: [string, ...string[]] }
 
 function createApp(session: Session, opts?: {
+    stopPacTask?: SyncEngine['stopPacTask']
     resumeSession?: (sessionId: string, namespace: string, resumeOpts?: { permissionMode?: string }) => Promise<{ type: string; sessionId?: string; message?: string; code?: string }>
     reopenSession?: (sessionId: string, namespace: string) => Promise<ReopenResultMock>
     listSlashCommands?: SyncEngine['listSlashCommands']
@@ -162,6 +163,7 @@ function createApp(session: Session, opts?: {
             currentModelId: null
         })),
         listOpencodeModelsForSession,
+        stopPacTask: opts?.stopPacTask,
         listOpencodeReasoningEffortOptionsForSession,
         listGrokModelsForSession,
         listGrokReasoningEffortOptionsForSession,
@@ -1298,6 +1300,24 @@ describe('sessions routes', () => {
         const response = await app.request('/api/sessions/session-1/cursor-models')
 
         expect(response.status).toBe(400)
+    })
+
+    it('routes PAC task stops to accessible active OpenCode sessions', async () => {
+        const calls: Array<[string, string]> = []
+        const session = createSession({ metadata: { path: '/tmp/project', host: 'localhost', flavor: 'opencode' } })
+        const { app } = createApp(session, { stopPacTask: async (sessionId, taskId) => {
+            calls.push([sessionId, taskId]); return { status: 'stop_requested' }
+        } })
+        const invoke = (body: unknown) => app.request('/api/sessions/session-1/pac-tasks/stop', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
+        })
+        expect((await invoke({ taskId: 'pac:child' })).status).toBe(200)
+        expect(calls).toEqual([['session-1', 'pac:child']])
+        expect((await invoke({ taskId: '' })).status).toBe(400)
+        const other = createApp(createSession()).app
+        expect((await other.request('/api/sessions/session-1/pac-tasks/stop', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'pac:child' })
+        })).status).toBe(400)
     })
 
     it('rejects opencode-models for non-OpenCode sessions', async () => {

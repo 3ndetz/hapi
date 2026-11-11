@@ -548,6 +548,10 @@ export class RpcGateway {
         return await this.sessionRpc(sessionId, RPC_METHODS.ListOpencodeModels, {}) as RpcListOpencodeModelsResponse
     }
 
+    async stopPacTask(sessionId: string, taskId: string): Promise<unknown> {
+        return await this.sessionRpc(sessionId, RPC_METHODS.StopPacTask, { taskId })
+    }
+
     async listOpencodeModelsForCwd(machineId: string, cwd: string): Promise<RpcListOpencodeModelsResponse> {
         return await this.machineRpc(machineId, RPC_METHODS.ListOpencodeModelsForCwd, { cwd }) as RpcListOpencodeModelsResponse
     }

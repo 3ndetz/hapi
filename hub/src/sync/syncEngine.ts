@@ -4998,6 +4998,10 @@ export class SyncEngine {
         return await this.rpcGateway.listOpencodeModelsForSession(sessionId)
     }
 
+    async stopPacTask(sessionId: string, taskId: string): Promise<unknown> {
+        return await this.rpcGateway.stopPacTask(sessionId, taskId)
+    }
+
     async listOpencodeModelsForCwd(machineId: string, cwd: string): Promise<RpcListOpencodeModelsResponse> {
         return await this.rpcGateway.listOpencodeModelsForCwd(machineId, cwd)
     }

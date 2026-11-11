@@ -14,7 +14,7 @@ import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
 import { writeRunnerState, RunnerLocallyPersistedState, readRunnerState, acquireRunnerLock, releaseRunnerLock } from '@/persistence';
 import { getCliArgs } from '@/utils/cliArgs';
-import { getProcessStartMarker, readWindowsProcessStartMarkers, getSystemBootId, getProcessThreadGroupId, normalizeBootId, isProcessAlive, isWindows, killProcess, killProcessByChildProcess, killProcessTreeByPid } from '@/utils/process';
+import { getProcessStartMarker, getSystemBootId, getProcessThreadGroupId, normalizeBootId, isProcessAlive, isWindows, killProcess, killProcessByChildProcess, killProcessTreeByPid } from '@/utils/process';
 import { findStopSessionOrphanTargets, listWindowsProcessesWithCommandLine, reapRunnerSpawnedOrphans } from '@/runner/orphanReap';
 import { decideUntrackedRunnerWebhook } from '@/runner/lateRunnerWebhook';
 import { cleanupFailedStartupAfterExit, sessionStartupTimeout, waitForRecoverableStartup } from './sessionStartup';
@@ -409,11 +409,12 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
     // A single CIM snapshot avoids launching PowerShell once for every old
     // session. If the snapshot fails, live PIDs remain quarantined; they are
     // never assumed to have exited or to belong to a particular session.
-    const recoveredMarkers = isWindows() && persistedResumeProcesses.size > 0 ? readWindowsProcessStartMarkers() : null;
+    const recoveredTable = isWindows() && persistedResumeProcesses.size > 0
+      ? await readWindowsProcessTable(15_000, [...persistedResumeProcesses.keys()]) : null;
     for (const [pid, record] of [...persistedResumeProcesses]) {
-      const alive = isWindows() && recoveredMarkers?.has(pid) ? true : isProcessAlive(pid);
+      const alive = isWindows() ? recoveredTable === null || recoveredTable.has(pid) : isProcessAlive(pid);
       const generation = isWindows()
-        ? classifyRecoveredProcessGeneration(alive, recoveredMarkers?.get(pid) ?? null, record.processStartMarker,
+        ? classifyRecoveredProcessGeneration(alive, recoveredTable?.get(pid)?.marker ?? null, record.processStartMarker,
           { pid, threadGroupId: null, currentBootId: getSystemBootId(), persistedBootId: record.bootId })
         : probeRecoveredProcessGeneration(pid, record);
       if (generation === 'verified') {

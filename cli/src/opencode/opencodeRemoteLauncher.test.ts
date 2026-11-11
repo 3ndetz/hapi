@@ -9,6 +9,8 @@ import { ACP_INDETERMINATE_SYMBOL } from '@/agent/backends/acp/AcpStdioTransport
 
 
 const harness = vi.hoisted(() => ({
+    pacCompactCalls: [] as Array<{ method: string; params: Record<string, unknown> }>,
+    pacCompactResult: { status: 'completed', summary: 'PAC summary' } as { status: string; summary: string },
     transcriptFetchImpl: null as null | (() => Promise<Response>),
     servePid: null as number | null,
     servePidCalls: [] as number[][],
@@ -205,6 +207,10 @@ vi.mock('./utils/opencodeBackend', () => ({
             }
         }),
         getSessionModelsMetadata: vi.fn(() => harness.sessionModelsMetadata),
+        sendExtensionRequest: vi.fn(async (method: string, params: Record<string, unknown>) => {
+            harness.pacCompactCalls.push({ method, params });
+            return harness.pacCompactResult;
+        }),
         getThoughtLevelConfigOption: vi.fn(() => {
             harness.thoughtLevelLookups.push(harness.events.length);
             return harness.thoughtLevelOption ?? undefined;
@@ -593,6 +599,8 @@ function createClearMode(): OpencodeMode {
 }
 
 afterEach(async () => {
+    harness.pacCompactCalls = [];
+    harness.pacCompactResult = { status: 'completed', summary: 'PAC summary' };
     harness.transcriptFetchImpl = null;
     harness.setModelArgs = [];
     harness.setConfigOptionArgs = [];
@@ -816,6 +824,15 @@ describe('opencodeRemoteLauncher inline model switch', () => {
 
         expect(harness.events).toEqual(['prompt:start', 'prompt:end']);
         expect(compactHarness.calls.length).toBe(1);
+    });
+
+    it('compacts the selected PAC session through its ACP extension, not the native OpenCode REST API', async () => {
+        harness.sessionModelsMetadata = { currentModelId: 'PAC_testpac/sonnet', availableModels: [] };
+        const { session, agentMessages } = createSessionStub([{ message: '', mode: createCompactMode('PAC_testpac/sonnet') }]);
+        await opencodeRemoteLauncher(session as never, { onCompactAvailabilityChange: () => {} });
+        expect(harness.pacCompactCalls).toEqual([{ method: 'pac/compact', params: { sessionId: 'acp-session-1' } }]);
+        expect(compactHarness.calls).toEqual([]);
+        expect(agentMessages).toContainEqual({ type: 'compact-summary', summary: 'PAC summary' });
     });
 
     it('processes a queued prompt only after an earlier queued /compact operation has finished', async () => {

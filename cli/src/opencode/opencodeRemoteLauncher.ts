@@ -1951,6 +1951,27 @@ ${messageText}`;
                 || this.compactResultSuppressed;
 
             const backend = this.backend;
+            const pacModel = backend?.getSessionModelsMetadata?.(acpSessionId)?.currentModelId ?? this.currentBackendModel;
+            if (backend && pacModel?.startsWith('PAC_')) {
+                // PAC owns a different Claude session from OpenCode's internal
+                // HTTP server. Never compact the native OpenCode session here.
+                this.compactOperationPhase = 'summarize';
+                try {
+                    const result = await backend.sendExtensionRequest<{ status?: unknown; summary?: unknown }>(
+                        'pac/compact', { sessionId: acpSessionId }, { timeoutMs: Infinity }
+                    );
+                    if (!isCancelled()) {
+                        if (result?.status !== 'completed' || typeof result.summary !== 'string') {
+                            session.sendSessionEvent({ type: 'message', message: '📦 PAC compaction result could not be verified.' });
+                        } else {
+                            session.client.sendAgentMessage({ type: 'compact-summary', summary: result.summary || 'PAC conversation compacted. Summary was not provided.' });
+                        }
+                    }
+                } catch {
+                    if (!isCancelled()) session.sendSessionEvent({ type: 'message', message: '📦 PAC compaction failed or its outcome is unknown.' });
+                }
+                return;
+            }
             const v2Rest = this.majorVersion === 'v2' ? this.v2RestInfo : null;
             const baseUrl = v2Rest?.baseUrl ?? this.baseUrl;
             if (!baseUrl || !backend) {

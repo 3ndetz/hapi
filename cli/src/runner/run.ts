@@ -14,7 +14,7 @@ import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
 import { writeRunnerState, RunnerLocallyPersistedState, readRunnerState, acquireRunnerLock, releaseRunnerLock } from '@/persistence';
 import { getCliArgs } from '@/utils/cliArgs';
-import { getProcessStartMarker, getSystemBootId, getProcessThreadGroupId, normalizeBootId, isProcessAlive, isWindows, killProcess, killProcessByChildProcess, killProcessTreeByPid } from '@/utils/process';
+import { getProcessStartMarker, readWindowsProcessStartMarkers, getSystemBootId, getProcessThreadGroupId, normalizeBootId, isProcessAlive, isWindows, killProcess, killProcessByChildProcess, killProcessTreeByPid } from '@/utils/process';
 import { findStopSessionOrphanTargets, listWindowsProcessesWithCommandLine, reapRunnerSpawnedOrphans } from '@/runner/orphanReap';
 import { decideUntrackedRunnerWebhook } from '@/runner/lateRunnerWebhook';
 import { cleanupFailedStartupAfterExit, sessionStartupTimeout, waitForRecoverableStartup } from './sessionStartup';
@@ -406,9 +406,16 @@ export async function startRunner(options: { workspaceRoots?: string[] } = {}): 
         logger.debug('[RUNNER RUN] Failed to persist resume processes:', error);
       }
     };
+    // A single CIM snapshot avoids launching PowerShell once for every old
+    // session. If the snapshot fails, live PIDs remain quarantined; they are
+    // never assumed to have exited or to belong to a particular session.
+    const recoveredMarkers = isWindows() && persistedResumeProcesses.size > 0 ? readWindowsProcessStartMarkers() : null;
     for (const [pid, record] of [...persistedResumeProcesses]) {
-      const alive = isProcessAlive(pid);
-      const generation = probeRecoveredProcessGeneration(pid, record);
+      const alive = isWindows() && recoveredMarkers?.has(pid) ? true : isProcessAlive(pid);
+      const generation = isWindows()
+        ? classifyRecoveredProcessGeneration(alive, recoveredMarkers?.get(pid) ?? null, record.processStartMarker,
+          { pid, threadGroupId: null, currentBootId: getSystemBootId(), persistedBootId: record.bootId })
+        : probeRecoveredProcessGeneration(pid, record);
       if (generation === 'verified') {
         pidToRequestedSessionId.set(pid, record.requestedSessionId);
         if (record.confirmedSessionId) pidToConfirmedSessionId.set(pid, record.confirmedSessionId);

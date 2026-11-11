@@ -1,5 +1,5 @@
 import { asString, isObject } from '@hapi/protocol';
-import type { OpencodeModelsResponse, OpencodeModelSummary } from '@hapi/protocol/apiTypes';
+import type { OpencodeModelsResponse, OpencodeModelSummary, PacDiscoveryWarning } from '@hapi/protocol/apiTypes';
 import { AcpStdioTransport } from '@/agent/backends/acp/AcpStdioTransport';
 import packageJson from '../../../package.json';
 import { getErrorMessage } from './rpcResponses';
@@ -84,6 +84,16 @@ function extractModelsFromResponse(response: unknown): {
     };
 }
 
+function extractPacWarnings(response: unknown): PacDiscoveryWarning[] {
+    if (!isObject(response) || !isObject(response._meta) || !Array.isArray(response._meta.pacDiscoveryWarnings)) return [];
+    return response._meta.pacDiscoveryWarnings.slice(0, 64).flatMap((warning): PacDiscoveryWarning[] => {
+        if (!isObject(warning) || typeof warning.name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(warning.name)) return [];
+        if (warning.code !== 'unavailable' && warning.code !== 'source_setup_failed' &&
+            warning.code !== 'rule_frontmatter_unsupported' && warning.code !== 'external_import_unsupported') return [];
+        return [{ name: warning.name, code: warning.code }];
+    });
+}
+
 async function runOpencodeProbe(cwd: string): Promise<ListOpencodeModelsForCwdResponse> {
     const transport = await AcpStdioTransport.create({
         command: getAgentLaunchCommand('opencode'),
@@ -113,11 +123,13 @@ async function runOpencodeProbe(cwd: string): Promise<ListOpencodeModelsForCwdRe
         }, { timeoutMs: PROBE_TIMEOUT_MS });
 
         const { availableModels, currentModelId } = extractModelsFromResponse(newResponse);
+        const pacDiscoveryWarnings = extractPacWarnings(newResponse);
 
         return {
             success: true,
             availableModels,
-            currentModelId
+            currentModelId,
+            ...(pacDiscoveryWarnings.length ? { pacDiscoveryWarnings } : {})
         };
     } finally {
         await transport.close().catch(() => undefined);
@@ -155,7 +167,7 @@ export async function listOpencodeModelsForCwd(
     const promise = (async () => {
         try {
             const response = await runOpencodeProbe(trimmed);
-            if (response.success) {
+            if (response.success && !response.pacDiscoveryWarnings?.length) {
                 cache.set(trimmed, {
                     expiresAt: Date.now() + CACHE_TTL_MS,
                     response

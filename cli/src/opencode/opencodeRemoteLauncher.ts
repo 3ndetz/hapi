@@ -2205,7 +2205,7 @@ ${messageText}`;
         const message = presentQuestionToolCall(rawMessage);
         // v1 ACP strips the native summary/parent metadata (and old versions
         // strip message IDs too). The native transcript owns these text streams.
-        if (this.nativeTranscript && this.majorVersion === 'v1' && (message.type === 'text' || message.type === 'reasoning')) return;
+        if (this.nativeTranscript && this.majorVersion === 'v1' && !this.currentBackendModel?.startsWith('PAC_') && (message.type === 'text' || message.type === 'reasoning')) return;
         const converted = convertAgentMessage(message, this.currentBackendModel);
         if (converted) {
             this.session.sendAgentMessage(converted);

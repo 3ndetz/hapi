@@ -2634,6 +2634,17 @@ describe('opencodeRemoteLauncher inline model switch', () => {
         addMessage.mockRestore();
     });
 
+    it('forwards PAC text and reasoning when the v1 native transcript is empty', async () => {
+        const { session, agentMessages } = createSessionStub([{ message: 'first', mode: createMode('PAC_1/claude-opus') }]);
+        const launcherPromise = opencodeRemoteLauncher(session as never);
+        while (!harness.events.includes('prompt:start')) await new Promise<void>(resolve => setImmediate(resolve));
+        harness.promptOnMessage!({ type: 'text', text: 'PAC answer' });
+        harness.promptOnMessage!({ type: 'reasoning', text: 'PAC thought' });
+        expect(agentMessages.some((message: unknown) => JSON.stringify(message).includes('PAC answer'))).toBe(true);
+        expect(agentMessages.some((message: unknown) => JSON.stringify(message).includes('PAC thought'))).toBe(true);
+        await launcherPromise;
+    });
+
     it('forwards the native question tool as AskUserQuestion with the multiSelect flag the web reads', async () => {
         const { session, agentMessages } = createSessionStub([{ message: 'first', mode: createMode() }]);
         const launcherPromise = opencodeRemoteLauncher(session as never);

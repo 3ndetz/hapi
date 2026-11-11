@@ -105,6 +105,13 @@ describe('RpcGateway RPC timeouts', () => {
         expect(timeouts).toEqual([120_000])
     })
 
+    it('allows both OpenCode model-discovery handshakes to complete', async () => {
+        const { gateway, timeouts, calls } = createGateway()
+        await gateway.listOpencodeModelsForCwd('machine-1', 'C:\\workspace')
+        expect(timeouts).toEqual([120_000])
+        expect(JSON.parse(calls[0].params)).toEqual({ cwd: 'C:\\workspace' })
+    })
+
     it('uses an extended RPC timeout when listing Copilot models', async () => {
         const { gateway, timeouts } = createGateway()
 

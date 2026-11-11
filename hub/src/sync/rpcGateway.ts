@@ -553,7 +553,9 @@ export class RpcGateway {
     }
 
     async listOpencodeModelsForCwd(machineId: string, cwd: string): Promise<RpcListOpencodeModelsResponse> {
-        return await this.machineRpc(machineId, RPC_METHODS.ListOpencodeModelsForCwd, { cwd }) as RpcListOpencodeModelsResponse
+        // The runner starts an ACP process and performs two bounded handshakes;
+        // the outer deadline must outlive both and their cleanup.
+        return await this.machineRpc(machineId, RPC_METHODS.ListOpencodeModelsForCwd, { cwd }, MODEL_LIST_RPC_TIMEOUT_MS) as RpcListOpencodeModelsResponse
     }
 
     async listGrokModelsForCwd(machineId: string, cwd: string): Promise<RpcListGrokModelsResponse> {

@@ -59,13 +59,13 @@ describe('listOpencodeModelsForCwd', () => {
             1,
             'initialize',
             expect.objectContaining({ protocolVersion: 1 }),
-            expect.any(Object)
+            expect.objectContaining({ timeoutMs: 50_000 })
         )
         expect(sendRequestMock).toHaveBeenNthCalledWith(
             2,
             'session/new',
             expect.objectContaining({ cwd: '/home/user/project', mcpServers: [] }),
-            expect.any(Object)
+            expect.objectContaining({ timeoutMs: 50_000 })
         )
         expect(result.success).toBe(true)
         expect(result.availableModels).toEqual([

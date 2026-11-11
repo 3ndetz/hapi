@@ -17,7 +17,9 @@ interface CacheEntry {
 }
 
 const CACHE_TTL_MS = 60_000;
-const PROBE_TIMEOUT_MS = 30_000;
+// OpenCode can need a cold package/plugin startup on Windows. Both ACP
+// handshakes must fit inside the Hub's 120-second model-list budget.
+const PROBE_TIMEOUT_MS = 50_000;
 const cache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<ListOpencodeModelsForCwdResponse>>();
 

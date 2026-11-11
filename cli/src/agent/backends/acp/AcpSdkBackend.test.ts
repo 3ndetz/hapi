@@ -54,6 +54,22 @@ afterEach(() => {
 });
 
 describe('AcpSdkBackend', () => {
+    it('routes PAC questions through a form instead of auto-approving permissions', async () => {
+        const backend = new AcpSdkBackend({ command: 'agent' });
+        const form = vi.fn().mockResolvedValue({ action: 'accept', content: { q0_custom: 'custom', q1: ['Red', 'Blue'] } });
+        backend.onFormElicitation(form);
+        const internal = backend as unknown as { handlePermissionRequest: (params: unknown, id: number) => Promise<unknown> };
+        const params = { sessionId: 's', _meta: { pac: { question: true } }, toolCall: { toolCallId: 'call', rawInput: { questions: [
+            { question: 'Name?', header: 'Name', multiSelect: false, options: [{ label: 'A', description: '' }, { label: 'B', description: '' }] },
+            { question: 'Colors?', header: 'Color', multiSelect: true, options: [{ label: 'Red', description: '' }, { label: 'Blue', description: '' }] }
+        ] } } };
+        await expect(internal.handlePermissionRequest(params, 1)).resolves.toEqual({ outcome: { outcome: 'selected', optionId: 'answer' },
+            _meta: { pac: { answers: { '0': ['custom'], '1': ['Red', 'Blue'] } } } });
+        expect(form).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 's', toolCallId: 'call' }));
+        form.mockResolvedValueOnce({ action: 'cancel' });
+        await expect(internal.handlePermissionRequest(params, 2)).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+    });
+
     it('forwards ACP session_info_update titles without requiring an active prompt', () => {
         const backend = new AcpSdkBackend({ command: 'agent' });
         const updates: Array<{ sessionId: string | null; title: string | null }> = [];

@@ -1528,6 +1528,43 @@ export class AcpSdkBackend implements AgentBackend {
             return { outcome: { outcome: 'cancelled' } };
         }
 
+        // PAC questions carry answers, so they must never pass through ordinary
+        // permission auto-approval (including YOLO mode).
+        const meta = isObject(params._meta) && isObject(params._meta.pac) ? params._meta.pac : null;
+        if (meta?.question === true) {
+            const toolCall = isObject(params.toolCall) ? params.toolCall : {};
+            const input = isObject(toolCall.rawInput) ? toolCall.rawInput : {};
+            const questions = Array.isArray(input.questions) ? input.questions : [];
+            if (!questions.length || questions.length > 4 || questions.some((q) => !isObject(q) ||
+                typeof q.question !== 'string' || typeof q.header !== 'string' || typeof q.multiSelect !== 'boolean' ||
+                !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4 ||
+                q.options.some((o: unknown) => !isObject(o) || typeof o.label !== 'string' || typeof o.description !== 'string'))) {
+                return { outcome: { outcome: 'cancelled' } };
+            }
+            const properties: Record<string, unknown> = {};
+            questions.forEach((question, index) => {
+                const q = question as Record<string, any>;
+                const key = `q${index}`;
+                const options = q.options.map((o: Record<string, string>) => ({ const: o.label, title: o.label, description: o.description }));
+                properties[key] = { type: q.multiSelect ? 'array' : 'string', title: q.header, description: q.question,
+                    ...(q.multiSelect ? { items: { anyOf: options } } : { oneOf: options }) };
+                properties[`${key}_custom`] = { type: 'string' };
+            });
+            const response = await this.handleElicitationRequest({ mode: 'form', sessionId: params.sessionId,
+                toolCallId: toolCall.toolCallId, message: 'Answer the questions', requestedSchema: { type: 'object', properties } });
+            if (response.action !== 'accept' || !response.content) return { outcome: { outcome: 'cancelled' } };
+            const answers: Record<string, string[]> = {};
+            for (let i = 0; i < questions.length; i++) {
+                const value = response.content[`q${i}`];
+                const custom = response.content[`q${i}_custom`];
+                const values = [...(Array.isArray(value) ? value : typeof value === 'string' ? [value] : []),
+                    ...(typeof custom === 'string' && custom ? [custom] : [])].filter((v): v is string => typeof v === 'string');
+                if (!values.length) return { outcome: { outcome: 'cancelled' } };
+                answers[String(i)] = values;
+            }
+            return { outcome: { outcome: 'selected', optionId: 'answer' }, _meta: { pac: { answers } } };
+        }
+
         const sessionId = asString(params.sessionId) ?? this.activeSessionId ?? 'unknown';
         const toolCall = isObject(params.toolCall) ? params.toolCall : {};
         const toolCallId = asString(toolCall.toolCallId) ?? `tool-${Date.now()}`;

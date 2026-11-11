@@ -158,6 +158,13 @@ export class AcpStdioTransport {
             logger.debug('[ACP] agent CLI guard armed', describeAgentAcpGuardState(childPid));
         }
 
+        // A child can close stdin between spawn and the first request. Node
+        // emits an error as well as invoking the write callback; without an
+        // error listener that event would terminate the whole runner.
+        this.process.stdin.on('error', (error) => {
+            this.markClosed(markAcpIndeterminate(error));
+        });
+
         this.process.stdout.setEncoding('utf8');
         this.process.stdout.on('data', (chunk) => this.handleStdout(chunk));
 

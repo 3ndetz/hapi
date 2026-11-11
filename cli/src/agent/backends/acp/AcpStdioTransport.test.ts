@@ -19,6 +19,7 @@ const spawnState = vi.hoisted(() => ({
     exitHandlers: [] as Array<(code: number | null, signal: NodeJS.Signals | null) => void>,
     closeHandlers: [] as Array<(code: number | null, signal: NodeJS.Signals | null) => void>,
     stdoutDataHandlers: [] as Array<(chunk: string) => void>,
+    stdinErrorHandlers: [] as Array<(error: Error) => void>,
     stdinEnd: vi.fn(),
     stdinWrite: vi.fn<(chunk: string) => boolean>(() => true),
     kill: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock('node:child_process', () => ({
         spawnState.exitHandlers = [];
         spawnState.closeHandlers = [];
         spawnState.stdoutDataHandlers = [];
+        spawnState.stdinErrorHandlers = [];
         const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
         const proc = {
             get pid() {
@@ -73,6 +75,9 @@ vi.mock('node:child_process', () => ({
                 })
             },
             stdin: {
+                on: vi.fn((event: string, handler: (error: Error) => void) => {
+                    if (event === 'error') spawnState.stdinErrorHandlers.push(handler);
+                }),
                 end: (...args: unknown[]) => spawnState.stdinEnd(...args),
                 write: (chunk: string) => spawnState.stdinWrite(chunk)
             },
@@ -290,6 +295,16 @@ describe('AcpStdioTransport closed stdin writes', () => {
         spawnState.exitHandlers = [];
         spawnState.closeHandlers = [];
         spawnState.stdoutDataHandlers = [];
+    });
+
+    test('handles an asynchronous broken stdin pipe without crashing the runner', async () => {
+        const transport = await AcpStdioTransport.create({ command: 'agent', args: ['acp'] });
+        const pending = transport.sendRequest('initialize');
+        const rejected = expect(pending).rejects.toThrow('broken pipe');
+        expect(spawnState.stdinErrorHandlers).toHaveLength(1);
+        spawnState.stdinErrorHandlers[0](new Error('broken pipe'));
+        await rejected;
+        await expect(transport.sendRequest('initialize')).rejects.toThrow('broken pipe');
     });
 
     test('rejects new requests after process exit before close without writing stdin', async () => {
